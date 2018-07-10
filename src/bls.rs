@@ -12,11 +12,12 @@ use types::{BigNum, GroupG1, GroupG2};
 use constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
 
 
+// TODO: Support point compression
 // TODO: Create a common trait that has to_bytes and from_bytes that can be used by the following structs
-
+// TODO: Add domain separation, for single sig, aggregation sig
 
 pub struct SigKey {
-    x: BigNum
+    pub x: BigNum
 }
 
 impl SigKey {
@@ -28,7 +29,7 @@ impl SigKey {
 }
 
 pub struct VerKey {
-    point: GroupG2
+    pub point: GroupG2
 }
 
 impl Clone for VerKey {
@@ -63,7 +64,7 @@ impl Keypair {
 }
 
 pub struct Signature {
-    point: GroupG1,
+    pub point: GroupG1,
 }
 
 impl Clone for Signature {
@@ -77,14 +78,21 @@ impl Clone for Signature {
 }
 
 impl Signature {
+    // Signature = H_0(msg) * sk
     pub fn new(msg: &[u8], sig_key: &SigKey) -> Self {
-        // Signature = H_0(msg) * sk
         let hash_point = hash_on_GroupG1(msg);
         let sig = hash_point.mul(&sig_key.x);
+        // This is different from the paper, the other exponentiation happens in aggregation.
+        // This avoids the signer to know beforehand of all other participants
         Signature { point: sig }
     }
 
     pub fn verify(&self, msg: &[u8], ver_key: &VerKey) -> bool {
+        // TODO: Check if point exists on curve, maybe use `rhs`
+        if self.point.is_infinity() {
+            println!("Signature point at infinity");
+            return false;
+        }
         let msg_hash_point = hash_on_GroupG1(msg);
         let mut lhs = ate_pairing(&GeneratorG2, &self.point);
         let mut rhs = ate_pairing(&ver_key.point, &msg_hash_point);
@@ -98,13 +106,13 @@ impl Signature {
 }
 
 pub struct AggregatedVerKey {
-    point: GroupG2
+    pub point: GroupG2
 }
 
 impl AggregatedVerKey {
-    // Hashes a verkey with all other verkeys using a Hash function H:{0, 1}∗ -> Z_q
-    // Takes a verkey vk_i and all verkeys vk_1, vk_2,...vk_n (including vk_i) and calculates
-    // H(vk_i||vk_1||vk_2...||vk_i||...vk_n)
+    // Hashes a verkey with all other verkeys using a Hash function `H:{0, 1}* -> Z_q`
+    // Takes a verkey `vk_i` and all verkeys `vk_1, vk_2,...vk_n` (including `vk_i`) and calculates
+    // `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
     pub fn hashed_verkey_for_aggregation(ver_key: &VerKey, all_ver_keys: &Vec<&VerKey>) -> BigNum {
         let mut res_vec: Vec<u8> = Vec::new();
 
@@ -122,9 +130,9 @@ impl AggregatedVerKey {
     }
 
     // Calculates the aggregated verkey
-    // For each v_i of the verkeys vk_1, vk_2,...vk_n, calculate
-    // a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])
-    // Add all a_i
+    // For each `v_i` of the verkeys `vk_1, vk_2,...vk_n` calculate
+    // `a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
+    // Add all `a_i`
     pub fn new(ver_keys: Vec<&VerKey>) -> Self {
         let mut vks: Vec<GroupG2> = Vec::new();
 
@@ -142,20 +150,20 @@ impl AggregatedVerKey {
             avk.add(&vk);
             println!("Aggr vk={}", &avk.tostring());
         }
-        println!("Aggr vk={}", &avk.tostring());
         AggregatedVerKey { point: avk }
     }
 }
 
 pub struct AggregatedSignature {
-    point: GroupG1
+    pub point: GroupG1
 }
 
 impl AggregatedSignature {
+    // The aggregator needs to know of all the signer before it can generate the aggregate signature.
     // Takes individual signatures from each of the signers and their verkey and aggregates the
-    // signatures. For each signature s_i from signer with verkey v_i calculate
-    // a_si = s_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])
-    // Add all a_si
+    // signatures. For each signature `s_i` from signer with verkey `v_i` calculate
+    // `a_si = s_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
+    // Add all `a_si`
     pub fn new(sigs_and_ver_keys: Vec<(&Signature, &VerKey)>) -> Self {
         let all_ver_keys: Vec<&VerKey> = sigs_and_ver_keys.iter().map(|(_, vk)| vk.clone()).collect();
         let mut sigs: Vec<GroupG1> = Vec::new();
@@ -184,8 +192,12 @@ impl AggregatedSignature {
     }
 
     // For verifying multiple aggregate signatures from the same signers,
-    // an aggregate verkey should be created once and then used for each signature verification
+    // an aggregated verkey should be created once and then used for each signature verification
     pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKey) -> bool {
+        if self.point.is_infinity() {
+            println!("Signature point at infinity");
+            return false;
+        }
         let msg_hash_point = hash_on_GroupG1(msg);
         let mut lhs = ate_pairing(&GeneratorG2, &self.point);
         let mut rhs = ate_pairing(&avk.point, &msg_hash_point);
@@ -197,7 +209,8 @@ impl AggregatedSignature {
 
 #[cfg(test)]
 mod tests {
-    // Add more test vectors
+    // TODO: Add tests for failure
+    // TODO: Add more test vectors
     use super::*;
 
     #[test]
@@ -232,6 +245,18 @@ mod tests {
             let sig = Signature::new(&b, &sk);
             assert!(sig.verify(&b, &vk));
         }
+    }
+
+    #[test]
+    fn signature_at_infinity() {
+        let keypair = Keypair::new(None);
+        let sk = keypair.sig_key;
+        let vk = keypair.ver_key;
+
+        let msg = "Small msg".as_bytes();
+        let mut sig = Signature { point: GroupG1::new() };
+        sig.point.inf();
+        assert_eq!(sig.verify(&msg, &vk), false);
     }
 
     #[test]
@@ -271,4 +296,18 @@ mod tests {
             assert!(asig.verify_using_aggr_vk(&b, &avk));
         }
     }
+
+    #[test]
+    fn aggregate_signature_at_infinity() {
+        let keypair1 = Keypair::new(None);
+        let keypair2 = Keypair::new(None);
+        let msg = "Small msg".as_bytes();
+
+        let mut asig = AggregatedSignature { point: GroupG1::new() };
+        asig.point.inf();
+        let vks: Vec<&VerKey> = vec![&keypair1.ver_key, &keypair2.ver_key];
+        assert_eq!(asig.verify(&msg, vks), false);
+    }
+
+    // TODO: New test that has benchmark for using AggregatedVerKey
 }
