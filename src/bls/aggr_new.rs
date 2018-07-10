@@ -1,109 +1,11 @@
-// BLS Signatures.
-// From: "Dan Boneh, Manu Drijvers, Gregory Neven. Compact Multi-Signatures for Smaller Blockchains".
-// Available from: https://eprint.iacr.org/2018/483.pdf
-// This link was helpful too https://crypto.stanford.edu/~dabo/pubs/papers/BLSmultisig.html
-
 extern crate amcl;
-extern crate rand;
 
-use rand::rngs::EntropyRng;
-use amcl_utils::{random_big_number, hash_on_GroupG1, ate_pairing, hash_as_BigNum};
-use types::{BigNum, GroupG1, GroupG2};
-use constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
+use super::super::amcl_utils::{hash_on_GroupG1, ate_pairing, hash_as_BigNum};
+use super::super::types::{BigNum, GroupG1, GroupG2};
+use super::super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
+use super::common::{SigKey, VerKey, Keypair};
+use super::simple::Signature;
 
-
-// TODO: Support point compression
-// TODO: Create a common trait that has to_bytes and from_bytes that can be used by the following structs
-// TODO: Add domain separation, for single sig, aggregation sig
-
-pub struct SigKey {
-    pub x: BigNum
-}
-
-impl SigKey {
-    pub fn new(rng: Option<EntropyRng>) -> Self {
-        SigKey {
-            x: random_big_number(&CURVE_ORDER, rng),
-        }
-    }
-}
-
-pub struct VerKey {
-    pub point: GroupG2
-}
-
-impl Clone for VerKey {
-    fn clone(&self) -> VerKey {
-        let mut temp_v = GroupG2::new();
-        temp_v.copy(&self.point);
-        VerKey {
-            point: temp_v
-        }
-    }
-}
-
-impl VerKey {
-    pub fn from_sigkey(sk: &SigKey) -> Self {
-        VerKey {
-            point: GeneratorG2.mul(&sk.x),
-        }
-    }
-}
-
-pub struct Keypair {
-    pub sig_key: SigKey,
-    pub ver_key: VerKey
-}
-
-impl Keypair {
-    pub fn new(rng: Option<EntropyRng>) -> Self {
-        let sk = SigKey::new(rng);
-        let vk = VerKey::from_sigkey(&sk);
-        Keypair { sig_key: sk, ver_key: vk }
-    }
-}
-
-pub struct Signature {
-    pub point: GroupG1,
-}
-
-impl Clone for Signature {
-    fn clone(&self) -> Signature {
-        let mut temp_s = GroupG1::new();
-        temp_s.copy(&self.point);
-        Signature {
-            point: temp_s
-        }
-    }
-}
-
-impl Signature {
-    // Signature = H_0(msg) * sk
-    pub fn new(msg: &[u8], sig_key: &SigKey) -> Self {
-        let hash_point = hash_on_GroupG1(msg);
-        let sig = hash_point.mul(&sig_key.x);
-        // This is different from the paper, the other exponentiation happens in aggregation.
-        // This avoids the signer to know beforehand of all other participants
-        Signature { point: sig }
-    }
-
-    pub fn verify(&self, msg: &[u8], ver_key: &VerKey) -> bool {
-        // TODO: Check if point exists on curve, maybe use `rhs`
-        if self.point.is_infinity() {
-            println!("Signature point at infinity");
-            return false;
-        }
-        let msg_hash_point = hash_on_GroupG1(msg);
-        let mut lhs = ate_pairing(&GeneratorG2, &self.point);
-        let mut rhs = ate_pairing(&ver_key.point, &msg_hash_point);
-        /*let mut lhs_bytes: [u8; FP12_SIZE] = [0; FP12_SIZE];
-        let mut rhs_bytes: [u8; FP12_SIZE] = [0; FP12_SIZE];
-        lhs.tobytes(&mut lhs_bytes);
-        rhs.tobytes(&mut rhs_bytes);
-        lhs_bytes.to_vec() == rhs_bytes.to_vec()*/
-        lhs.equals(&mut rhs)
-    }
-}
 
 pub struct AggregatedVerKey {
     pub point: GroupG2
@@ -212,52 +114,6 @@ mod tests {
     // TODO: Add tests for failure
     // TODO: Add more test vectors
     use super::*;
-
-    #[test]
-    fn gen_verkey() {
-        let sk1 = SigKey::new(None);
-        let rng = EntropyRng::new();
-        let sk2 = SigKey::new(Some(rng));
-        for mut sk in vec![sk1, sk2] {
-            let mut vk1 = VerKey::from_sigkey(&sk);
-            debug!("{}", sk.x.tostring());
-            debug!("{}", &vk1.point.tostring());
-
-            let mut vk2 = VerKey::from_sigkey(&sk);
-            debug!("{}", &vk2.point.tostring());
-
-            assert_eq!(&vk1.point.tostring(), &vk2.point.tostring());
-        }
-    }
-
-    #[test]
-    fn sign_verify() {
-        let keypair = Keypair::new(None);
-        let sk = keypair.sig_key;
-        let vk = keypair.ver_key;
-
-        let msg = "Small msg";
-        let msg1 = "121220888888822111212";
-        let msg2 = "Some message to sign";
-        let msg3 = "Some message to sign, making it bigger, ......, still bigger........................, not some entropy, hu2jnnddsssiu8921n ckhddss2222";
-        for m in vec![msg, msg1, msg2, msg3] {
-            let b = m.as_bytes();
-            let sig = Signature::new(&b, &sk);
-            assert!(sig.verify(&b, &vk));
-        }
-    }
-
-    #[test]
-    fn signature_at_infinity() {
-        let keypair = Keypair::new(None);
-        let sk = keypair.sig_key;
-        let vk = keypair.ver_key;
-
-        let msg = "Small msg".as_bytes();
-        let mut sig = Signature { point: GroupG1::new() };
-        sig.point.inf();
-        assert_eq!(sig.verify(&msg, &vk), false);
-    }
 
     #[test]
     fn aggr_sign_verify() {
