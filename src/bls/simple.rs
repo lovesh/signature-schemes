@@ -30,7 +30,7 @@ impl Signature {
     }
 
     pub fn verify(&self, msg: &[u8], ver_key: &VerKey) -> bool {
-        // TODO: Check if point exists on curve, maybe use `rhs`
+        // TODO: Check if point exists on curve, maybe use `ECP::new_big` and x cord of verkey
         if self.point.is_infinity() {
             println!("Signature point at infinity");
             return false;

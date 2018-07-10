@@ -7,6 +7,9 @@ use super::common::{SigKey, VerKey, Keypair};
 use super::simple::Signature;
 
 
+// This is a newer but slower way of doing BLS signature aggregation. This is not vulnerable to
+// rogue public key attack so does not need proof of possession.
+
 pub struct AggregatedVerKey {
     pub point: GroupG2
 }
