@@ -10,7 +10,11 @@
 extern crate amcl;
 extern crate rand;
 
-mod common;
-mod simple;
-mod aggr_new;
-mod aggr_old;
+pub mod common;
+pub mod simple;
+pub mod aggr_new;
+pub mod aggr_old;
+pub mod types;
+pub mod constants;
+mod amcl_utils;
+

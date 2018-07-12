@@ -1,8 +1,8 @@
 extern crate amcl;
 
-use super::super::amcl_utils::{hash_on_GroupG1, ate_pairing, hash_as_BigNum};
-use super::super::types::{BigNum, GroupG1, GroupG2};
-use super::super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
+use super::amcl_utils::{hash_on_GroupG1, ate_pairing, hash_as_BigNum};
+use super::types::{BigNum, GroupG1, GroupG2};
+use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
 use super::common::{SigKey, VerKey, Keypair};
 use super::simple::Signature;
 
@@ -99,6 +99,7 @@ impl AggregatedSignature {
     // For verifying multiple aggregate signatures from the same signers,
     // an aggregated verkey should be created once and then used for each signature verification
     pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKey) -> bool {
+//        if !self.is_valid_point() {
         if self.point.is_infinity() {
             println!("Signature point at infinity");
             return false;
@@ -111,6 +112,16 @@ impl AggregatedSignature {
 
     // TODO: Add batch verification
 }
+
+//impl<G: GroupG1> CurvePoint for AggregatedSignature {}
+/*impl CurvePoint for AggregatedSignature {
+    fn is_valid_point(&self) -> bool {
+        if self.point.is_infinity() {
+            return false;
+        }
+        true
+    }
+}*/
 
 #[cfg(test)]
 mod tests {
@@ -151,6 +162,7 @@ mod tests {
             let sigs_and_ver_keys: Vec<(&Signature, &VerKey)> = sigs_and_ver_keys.iter().map(|(s, v)| (s, v)).collect();
             let asig = AggregatedSignature::new(sigs_and_ver_keys);
             assert!(asig.verify(&b, vks_1));
+
             let avk = AggregatedVerKey::new(vks_2);
             assert!(asig.verify_using_aggr_vk(&b, &avk));
         }

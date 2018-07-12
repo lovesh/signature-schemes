@@ -1,8 +1,8 @@
 extern crate amcl;
 
-use super::super::amcl_utils::{hash_on_GroupG1, ate_pairing};
-use super::super::types::{BigNum, GroupG1, GroupG2};
-use super::super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
+use super::amcl_utils::{hash_on_GroupG1, ate_pairing};
+use super::types::GroupG1;
+use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
 use super::common::{SigKey, VerKey, Keypair};
 
 pub struct Signature {
@@ -47,6 +47,15 @@ impl Signature {
     }
 }
 
+/*impl CurvePoint for Signature {
+    fn is_valid_point(&self) -> bool {
+        if self.point.is_infinity() {
+            return false;
+        }
+        true
+    }
+}*/
+
 #[cfg(test)]
 mod tests {
     // TODO: Add tests for failure
@@ -71,9 +80,22 @@ mod tests {
     }
 
     #[test]
-    fn signature_at_infinity() {
+    fn verification_failure() {
         let keypair = Keypair::new(None);
         let sk = keypair.sig_key;
+        let vk = keypair.ver_key;
+
+        let mut msg = "Some msg";
+        let sig = Signature::new(&msg.as_bytes(), &sk);
+        msg = "Other msg";
+        assert_eq!(sig.verify(&msg.as_bytes(), &vk), false);
+        msg = "";
+        assert_eq!(sig.verify(&msg.as_bytes(), &vk), false);
+    }
+
+    #[test]
+    fn signature_at_infinity() {
+        let keypair = Keypair::new(None);
         let vk = keypair.ver_key;
 
         let msg = "Small msg".as_bytes();

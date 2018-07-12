@@ -8,8 +8,8 @@ use self::amcl::rand::{RAND};
 use self::amcl::arch::Chunk;
 use self::amcl::bls381::mpin::{SHA256, hash_id};
 use self::amcl::bls381::pair::{ate, fexp};
-use types::{BigNum, GroupG1, GroupG2, FP12};
-use constants::MODBYTES;
+use super::types::{BigNum, GroupG1, GroupG2, FP12};
+use super::constants::MODBYTES;
 
 
 pub fn random_big_number(order: &[Chunk], rng: Option<EntropyRng>) -> BigNum {
@@ -52,3 +52,46 @@ pub fn ate_pairing(point_G2: &GroupG2, point_G1: &GroupG1) -> FP12 {
     let e = ate(&point_G2, &point_G1);
     fexp(&e)
 }
+
+trait ByteSerializable {
+    fn from_bytes(bytes: &[u8]) -> Self;
+
+    fn to_bytes(&self) -> Vec<u8>;
+}
+
+/*
+pub struct CurvePoint<G> {
+    pub point: G
+}
+
+impl<G> CurvePoint<G> {
+    fn is_valid_point(&self) -> bool {
+        if self.point.is_infinity() {
+            return false;
+        }
+        true
+    }
+}
+
+
+enum CP {
+    G1(GroupG1),
+    G2(GroupG2),
+}
+
+impl CP {
+    fn is_valid_point(&self) -> bool {
+        match self {
+            G1(g1) =>  {
+                !g1.point.is_infinity()
+            },
+            G2(g2) =>  {
+                !g2.point.is_infinity()
+            }
+        }
+        if self.point.is_infinity() {
+            return false;
+        }
+        true
+    }
+}*/

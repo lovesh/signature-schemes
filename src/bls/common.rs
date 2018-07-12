@@ -2,9 +2,9 @@ extern crate amcl;
 extern crate rand;
 
 use rand::rngs::EntropyRng;
-use super::super::amcl_utils::{random_big_number, hash_on_GroupG1, ate_pairing, hash_as_BigNum};
-use super::super::types::{BigNum, GroupG1, GroupG2};
-use super::super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE, FP12_SIZE};
+use super::amcl_utils::{random_big_number, hash_on_GroupG1, ate_pairing, hash_as_BigNum};
+use super::types::{BigNum, GroupG1, GroupG2};
+use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE, FP12_SIZE};
 
 pub struct SigKey {
     pub x: BigNum

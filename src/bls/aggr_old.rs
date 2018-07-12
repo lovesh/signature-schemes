@@ -1,8 +1,8 @@
 extern crate amcl;
 
-use super::super::amcl_utils::{hash_on_GroupG1, ate_pairing};
-use super::super::types::{BigNum, GroupG1, GroupG2};
-use super::super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
+use super::amcl_utils::{hash_on_GroupG1, ate_pairing};
+use super::types::{GroupG1, GroupG2};
+use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
 use super::common::{SigKey, VerKey, Keypair};
 use super::simple::Signature;
 
@@ -121,8 +121,21 @@ mod tests {
             let sigs: Vec<&Signature> = sigs.iter().map(|s| s).collect();
             let asig = AggregatedSignatureOld::new(sigs);
             assert!(asig.verify(&b, vks_1));
+
             let avk = AggregatedVerKeyOld::new(vks_2);
             assert!(asig.verify_using_aggr_vk(&b, &avk));
         }
+    }
+
+    #[test]
+    fn aggregate_signature_at_infinity() {
+        let keypair1 = Keypair::new(None);
+        let keypair2 = Keypair::new(None);
+        let msg = "Small msg".as_bytes();
+
+        let mut asig = AggregatedSignatureOld { point: GroupG1::new() };
+        asig.point.inf();
+        let vks: Vec<&VerKey> = vec![&keypair1.ver_key, &keypair2.ver_key];
+        assert_eq!(asig.verify(&msg, vks), false);
     }
 }
