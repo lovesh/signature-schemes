@@ -47,7 +47,7 @@ assert!(asig.verify_using_aggr_vk(&b, &avk));
 ```
 
 ### Signature Aggregation and Verification (vulnerable to rogue public key attack)
-#### Proof of possession of public key
+#### Proof of possession of secret key (signature over verification key)
 ##### Generate proof
 ```
 let keypair = Keypair::new(None);
