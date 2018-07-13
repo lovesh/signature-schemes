@@ -4,7 +4,7 @@ extern crate rand;
 use rand::rngs::EntropyRng;
 use super::amcl_utils::{random_big_number, hash_on_GroupG1, ate_pairing, hash_as_BigNum};
 use super::types::{BigNum, GroupG1, GroupG2};
-use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE, FP12_SIZE};
+use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
 
 pub struct SigKey {
     pub x: BigNum
@@ -41,7 +41,7 @@ impl VerKey {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut vk_clone = self.clone();
-        let mut vk_bytes: [u8; FP12_SIZE] = [0; FP12_SIZE];
+        let mut vk_bytes: [u8; GroupG2_SIZE] = [0; GroupG2_SIZE];
         vk_clone.point.tobytes(&mut vk_bytes);
         vk_bytes.to_vec()
     }

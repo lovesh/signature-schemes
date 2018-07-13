@@ -19,6 +19,7 @@ impl AggregatedVerKey {
     // Takes a verkey `vk_i` and all verkeys `vk_1, vk_2,...vk_n` (including `vk_i`) and calculates
     // `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
     pub fn hashed_verkey_for_aggregation(ver_key: &VerKey, all_ver_keys: &Vec<&VerKey>) -> BigNum {
+        // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut res_vec: Vec<u8> = Vec::new();
 
         let mut vk_bytes: [u8; GroupG2_SIZE] = [0; GroupG2_SIZE];
@@ -39,6 +40,7 @@ impl AggregatedVerKey {
     // `a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
     // Add all `a_i`
     pub fn new(ver_keys: Vec<&VerKey>) -> Self {
+        // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut vks: Vec<GroupG2> = Vec::new();
 
         for mut vk in ver_keys.clone() {
@@ -70,6 +72,7 @@ impl AggregatedSignature {
     // `a_si = s_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
     // Add all `a_si`
     pub fn new(sigs_and_ver_keys: Vec<(&Signature, &VerKey)>) -> Self {
+        // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let all_ver_keys: Vec<&VerKey> = sigs_and_ver_keys.iter().map(|(_, vk)| vk.clone()).collect();
         let mut sigs: Vec<GroupG1> = Vec::new();
         for (sig, mut vk) in sigs_and_ver_keys {

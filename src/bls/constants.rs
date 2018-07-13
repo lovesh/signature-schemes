@@ -1,8 +1,8 @@
 extern crate amcl;
 
-use self::amcl::bls381::rom;
 use self::amcl::arch::Chunk;
-use self::amcl::bls381::big::{NLEN, MODBYTES as bls381_MODBYTES};
+use BLSCurve::rom;
+use BLSCurve::big::{NLEN, MODBYTES as bls381_MODBYTES};
 use super::types::{GroupG1, GroupG2};
 
 pub const CURVE_ORDER: [Chunk; NLEN] = rom::CURVE_ORDER;
