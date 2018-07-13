@@ -6,8 +6,8 @@ use rand::rngs::EntropyRng;
 
 use self::amcl::rand::{RAND};
 use self::amcl::arch::Chunk;
-use self::amcl::bls381::mpin::{SHA256, hash_id};
-use self::amcl::bls381::pair::{ate, fexp};
+use BLSCurve::mpin::{SHA256, hash_id};
+use BLSCurve::pair::{ate, fexp};
 use super::types::{BigNum, GroupG1, GroupG2, FP12};
 use super::constants::MODBYTES;
 
@@ -53,11 +53,7 @@ pub fn ate_pairing(point_G2: &GroupG2, point_G1: &GroupG1) -> FP12 {
     fexp(&e)
 }
 
-trait ByteSerializable {
-    fn from_bytes(bytes: &[u8]) -> Self;
-
-    fn to_bytes(&self) -> Vec<u8>;
-}
+// TODO: impl From and To bytes traits
 
 /*
 pub struct CurvePoint<G> {

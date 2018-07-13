@@ -4,7 +4,7 @@
 // This link was helpful too https://crypto.stanford.edu/~dabo/pubs/papers/BLSmultisig.html
 
 // TODO: Add domain separation, for single sig, aggregation sig
-// TODO: Create a common trait that has to_bytes and from_bytes that can be used by the various structs
+// TODO: Add From and Into traits for converting from and to bytes for various structs
 // TODO: Support point compression
 
 extern crate amcl;
@@ -18,3 +18,5 @@ pub mod types;
 pub mod constants;
 mod amcl_utils;
 
+// Change self::amcl::bls381 to self::amcl::bls383 to use BLS383 curve
+pub use self::amcl::bls381 as BLSCurve;
