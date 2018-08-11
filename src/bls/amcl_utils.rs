@@ -10,22 +10,12 @@ use BLSCurve::mpin::{SHA256, hash_id};
 use BLSCurve::pair::{ate, fexp};
 use super::types::{BigNum, GroupG1, GroupG2, FP12};
 use super::constants::MODBYTES;
-
+use super::super::utils::get_seeded_RNG;
 
 pub fn random_big_number(order: &[Chunk], rng: Option<EntropyRng>) -> BigNum {
     // initialise from at least 128 byte string of raw random entropy
     let entropy_size = 256;
-    let mut entropy = vec![0; entropy_size];
-    match rng {
-        Some(mut rng) =>  rng.fill_bytes(&mut entropy.as_mut_slice()),
-        None => {
-            let mut rng = EntropyRng::new();
-            rng.fill_bytes(&mut entropy.as_mut_slice());
-        }
-    }
-    let mut r = RAND::new();
-    r.clean();
-    r.seed(entropy_size, &entropy);
+    let mut r = get_seeded_RNG(entropy_size, rng);
     BigNum::randomnum(&BigNum::new_ints(&order), &mut r)
 }
 
