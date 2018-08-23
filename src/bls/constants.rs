@@ -8,6 +8,8 @@ use super::types::{GroupG1, GroupG2};
 pub const CURVE_ORDER: [Chunk; NLEN] = rom::CURVE_ORDER;
 pub const MODBYTES: usize = bls381_MODBYTES;
 pub const FP12_SIZE: usize = (12 * MODBYTES) as usize;
+// Byte size of element in group G1, 1 extra byte for compression
+pub const GroupG1_SIZE: usize = (2 * MODBYTES + 1) as usize;
 // Byte size of element in group G2
 pub const GroupG2_SIZE: usize = (4 * MODBYTES) as usize;
 

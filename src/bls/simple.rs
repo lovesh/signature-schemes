@@ -4,6 +4,9 @@ use super::amcl_utils::{hash_on_GroupG1, ate_pairing};
 use super::types::GroupG1;
 use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
 use super::common::{SigKey, VerKey, Keypair};
+use bls::errors::SerzDeserzError;
+use bls::amcl_utils::get_G1_point_from_bytes;
+use bls::amcl_utils::get_bytes_for_G1_point;
 
 pub struct Signature {
     pub point: GroupG1,
@@ -45,6 +48,16 @@ impl Signature {
         lhs_bytes.to_vec() == rhs_bytes.to_vec()*/
         lhs.equals(&mut rhs)
     }
+
+    pub fn from_bytes(sig_bytes: &[u8]) -> Result<Signature, SerzDeserzError> {
+        Ok(Signature {
+            point: get_G1_point_from_bytes(sig_bytes)?
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        get_bytes_for_G1_point(&self.point)
+    }
 }
 
 /*impl CurvePoint for Signature {
@@ -74,8 +87,12 @@ mod tests {
         let msg3 = "Some message to sign, making it bigger, ......, still bigger........................, not some entropy, hu2jnnddsssiu8921n ckhddss2222";
         for m in vec![msg, msg1, msg2, msg3] {
             let b = m.as_bytes();
-            let sig = Signature::new(&b, &sk);
+            let mut sig = Signature::new(&b, &sk);
             assert!(sig.verify(&b, &vk));
+
+            let bs = sig.to_bytes();
+            let mut sig1 = Signature::from_bytes(&bs).unwrap();
+            assert_eq!(&sig.point.tostring(), &sig1.point.tostring());
         }
     }
 

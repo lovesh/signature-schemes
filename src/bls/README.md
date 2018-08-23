@@ -23,7 +23,8 @@ let sig = Signature::new(&b, &sk);
 sig.verify(&b, &vk)
 ```
 
-### Signature Aggregation and Verification (Not vulnerable to rogue public key attack)
+
+### Signature Aggregation and Verification (Not vulnerable to rogue public key attack but slow)
 #### Signature Aggregation 
 ```
 let keypair1 = Keypair::new(None);
@@ -46,7 +47,7 @@ let avk = AggregatedVerKey::new(vks);
 assert!(asig.verify_using_aggr_vk(&b, &avk));
 ```
 
-### Signature Aggregation and Verification (vulnerable to rogue public key attack)
+### Signature Aggregation and Verification (vulnerable to rogue public key attack but fast)
 #### Proof of possession of secret key (signature over verification key)
 ##### Generate proof
 ```
@@ -82,4 +83,20 @@ asig.verify(&b, vks)
 let vks = vec![&keypair1.vk, &keypair2.vk]
 let avk = AggregatedVerKeyOld::new(vks);
 assert!(asig.verify_using_aggr_vk(&b, &avk));
+```
+
+#### Serialization and Deserialization
+```
+let bs: Vec<u8> = vec![1, 5, 190, 200, ......]
+
+let sk = SigKey::from_bytes(&bs);
+let sk_bytes = sk.tobytes();
+
+let vk = VerKey::from_bytes(&bs);
+let vk_bytes = vk.tobytes();
+
+let sig = Signature::from_bytes(&bs).unwrap();
+let sig_bytes = sig.tobytes();
+
+Similar for other objects like AggregatedVerKey, AggregatedSignature, AggregatedVerKeyOld, AggregatedSignatureOld  
 ```

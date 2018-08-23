@@ -333,12 +333,12 @@ pub fn key_pair_generate(rng: Option<&mut RAND>,s: &mut [u8],w: &mut [u8]) -> is
 
 	let mut WP=G.mul(&mut sc);
 
-	WP.tobytes(w,false);
+	WP.tobytes(w,false);   // To use point compression on public keys, change to true 
 
 	return res;
 }
 
-/* validate public key. Set full=true for fuller check */
+/* validate public key */
 #[allow(non_snake_case)]
 pub fn public_key_validate(w: &[u8]) -> isize {
 	let mut WP=ECP::frombytes(w);
@@ -415,7 +415,7 @@ pub fn ecpsp_dsa(sha: usize,rng: &mut RAND,s: &[u8],f: &[u8],c: &mut [u8],d: &mu
 
 	while db.iszilch() {
 		let mut u=BIG::randomnum(&r,rng);
-		let mut w=BIG::randomnum(&r,rng);
+		let mut w=BIG::randomnum(&r,rng);   /* side channel masking */
 		//if rom::AES_S>0 {
 		//	u.mod2m(2*rom::AES_S);
 		//}			

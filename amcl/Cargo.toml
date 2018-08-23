@@ -2,6 +2,5 @@
 name = "amcl"
 version = "0.1.0"
 authors = ["lovesh harchandani <lovesh.bond@gmail.com>"]
-workspace = ".."
 
 [dependencies]

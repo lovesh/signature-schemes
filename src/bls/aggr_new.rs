@@ -5,6 +5,11 @@ use super::types::{BigNum, GroupG1, GroupG2};
 use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
 use super::common::{SigKey, VerKey, Keypair};
 use super::simple::Signature;
+use bls::errors::SerzDeserzError;
+use bls::amcl_utils::get_bytes_for_G2_point;
+use bls::amcl_utils::get_G2_point_from_bytes;
+use bls::amcl_utils::get_G1_point_from_bytes;
+use bls::amcl_utils::get_bytes_for_G1_point;
 
 
 // This is a newer but slower way of doing BLS signature aggregation. This is not vulnerable to
@@ -58,6 +63,16 @@ impl AggregatedVerKey {
             println!("Aggr vk={}", &avk.tostring());
         }
         AggregatedVerKey { point: avk }
+    }
+
+    pub fn from_bytes(vk_bytes: &[u8]) -> Result<AggregatedVerKey, SerzDeserzError> {
+        Ok(AggregatedVerKey {
+            point: get_G2_point_from_bytes(vk_bytes)?
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        get_bytes_for_G2_point(&self.point)
     }
 }
 
@@ -113,6 +128,16 @@ impl AggregatedSignature {
         lhs.equals(&mut rhs)
     }
 
+    pub fn from_bytes(sig_bytes: &[u8]) -> Result<AggregatedSignature, SerzDeserzError> {
+        Ok(AggregatedSignature {
+            point: get_G1_point_from_bytes(sig_bytes)?
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        get_bytes_for_G1_point(&self.point)
+    }
+
     // TODO: Add batch verification
 }
 
@@ -163,11 +188,19 @@ mod tests {
             let vks_1: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let vks_2: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let sigs_and_ver_keys: Vec<(&Signature, &VerKey)> = sigs_and_ver_keys.iter().map(|(s, v)| (s, v)).collect();
-            let asig = AggregatedSignature::new(sigs_and_ver_keys);
+            let mut asig = AggregatedSignature::new(sigs_and_ver_keys);
             assert!(asig.verify(&b, vks_1));
 
-            let avk = AggregatedVerKey::new(vks_2);
+            let mut avk = AggregatedVerKey::new(vks_2);
             assert!(asig.verify_using_aggr_vk(&b, &avk));
+
+            let bs = asig.to_bytes();
+            let mut sig1 = AggregatedSignature::from_bytes(&bs).unwrap();
+            assert_eq!(&asig.point.tostring(), &sig1.point.tostring());
+
+            let bs = avk.to_bytes();
+            let mut avk1 = AggregatedVerKey::from_bytes(&bs).unwrap();
+            assert_eq!(&avk.point.tostring(), &avk1.point.tostring());
         }
     }
 

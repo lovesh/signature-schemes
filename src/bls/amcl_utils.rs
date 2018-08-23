@@ -9,8 +9,9 @@ use self::amcl::arch::Chunk;
 use BLSCurve::mpin::{SHA256, hash_id};
 use BLSCurve::pair::{ate, fexp};
 use super::types::{BigNum, GroupG1, GroupG2, FP12};
-use super::constants::MODBYTES;
 use super::super::utils::get_seeded_RNG;
+use bls::constants::{GroupG2_SIZE, GroupG1_SIZE, MODBYTES};
+use bls::errors::SerzDeserzError;
 
 pub fn random_big_number(order: &[Chunk], rng: Option<EntropyRng>) -> BigNum {
     // initialise from at least 128 byte string of raw random entropy
@@ -41,6 +42,43 @@ pub fn hash_as_BigNum(msg: &[u8]) -> BigNum {
 pub fn ate_pairing(point_G2: &GroupG2, point_G1: &GroupG1) -> FP12 {
     let e = ate(&point_G2, &point_G1);
     fexp(&e)
+}
+
+pub fn get_bytes_for_G1_point(point: &GroupG1) -> Vec<u8> {
+    let mut temp = GroupG1::new();
+    temp.copy(point);
+    let mut bytes: [u8; GroupG1_SIZE] = [0; GroupG1_SIZE];
+    temp.tobytes(&mut bytes, false);
+    bytes.to_vec()
+}
+
+pub fn get_G1_point_from_bytes(bytes: &[u8]) -> Result<GroupG1, SerzDeserzError> {
+    if bytes.len() != GroupG1_SIZE {
+        return Err(SerzDeserzError::GroupG2BytesIncorrectSize(bytes.len(), GroupG1_SIZE))
+    }
+    Ok(GroupG1::frombytes(bytes))
+}
+
+pub fn get_bytes_for_G2_point(point: &GroupG2) -> Vec<u8> {
+    let mut temp = GroupG2::new();
+    temp.copy(point);
+    let mut bytes: [u8; GroupG2_SIZE] = [0; GroupG2_SIZE];
+    temp.tobytes(&mut bytes);
+    bytes.to_vec()
+}
+
+pub fn get_G2_point_from_bytes(bytes: &[u8]) -> Result<GroupG2, SerzDeserzError> {
+    if bytes.len() != GroupG2_SIZE {
+        return Err(SerzDeserzError::GroupG2BytesIncorrectSize(bytes.len(), GroupG2_SIZE))
+    }
+    Ok(GroupG2::frombytes(bytes))
+}
+
+pub fn get_bytes_for_BigNum(n: &BigNum) -> Vec<u8> {
+    let mut temp = BigNum::new_copy(&n);
+    let mut bytes: [u8; MODBYTES] = [0; MODBYTES];
+    temp.tobytes(&mut bytes);
+    bytes.to_vec()
 }
 
 // TODO: impl From and To bytes traits
