@@ -1,7 +1,7 @@
 extern crate rand;
 
-mod bls;
-mod musig;
+pub mod bls;
+pub mod musig;
 mod utils;
 
 pub use bls::*;

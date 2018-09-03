@@ -17,7 +17,7 @@ pub mod aggr_old;
 pub mod types;
 pub mod constants;
 pub mod errors;
-mod amcl_utils;
+pub mod amcl_utils;
 
 // Change self::amcl::bls381 to self::amcl::bls383 to use BLS383 curve
 pub use self::amcl::bls381 as BLSCurve;
