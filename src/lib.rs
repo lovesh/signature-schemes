@@ -1,4 +1,6 @@
 extern crate amcl;
+#[macro_use]
+extern crate lazy_static;
 extern crate rand;
 
 mod keys;
@@ -19,6 +21,4 @@ pub use keys::{
     PublicKey,
     Keypair,
 };
-
-#[macro_use]
-extern crate lazy_static;
+pub use signature::Signature;
