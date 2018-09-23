@@ -52,11 +52,7 @@ impl AggregatePublicKey {
     /// Add a PublicKey to the AggregatePublicKey.
     pub fn add(&mut self, public_key: &PublicKey) {
         self.point.add(&public_key.point);
-        /*
-         * I don't know why this tostring() call is necessary,
-         * but tests fail without it.
-         */
-        self.point.tostring();
+        self.point.affine();
     }
 
     /// Instantiate an AggregatePublicKey from some serialized bytes.
@@ -109,11 +105,7 @@ impl AggregateSignature {
     /// Add a Signature to the AggregateSignature.
     pub fn add(&mut self, signature: &Signature) {
         self.point.add(&signature.point);
-        /*
-         * I don't know why this tostring() call is necessary,
-         * but tests fail without it.
-         */
-        self.point.tostring();
+        self.point.affine();
     }
 
     /// Verify this AggregateSignature against an AggregatePublicKey.
