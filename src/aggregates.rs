@@ -1,18 +1,15 @@
 extern crate amcl;
 
-use super::amcl_utils::{hash_on_GroupG1, ate_pairing};
+use super::amcl_utils::{hash_on_g1, ate_pairing};
 use super::types::{GroupG1, GroupG2};
 use super::constants::{
     GeneratorG2,
+    G1_BYTE_SIZE,
     G2_BYTE_SIZE,
 };
-use super::keys::{
-    PublicKey,
-    Keypair
-};
+use super::keys::PublicKey;
 use super::signature::Signature;
 use super::errors::DecodeError;
-use super::amcl_utils::get_bytes_for_G1_point;
 
 /// Allows for the adding/combining of multiple BLS PublicKeys.
 ///
@@ -118,32 +115,45 @@ impl AggregateSignature {
         if self.point.is_infinity() {
             return false;
         }
-        let msg_hash_point = hash_on_GroupG1(msg);
+        let msg_hash_point = hash_on_g1(msg);
         let mut lhs = ate_pairing(&GeneratorG2, &self.point);
         let mut rhs = ate_pairing(&avk.point, &msg_hash_point);
         lhs.equals(&mut rhs)
     }
 
-    /*
-    pub fn from_bytes(sig_bytes: &[u8]) -> Result<AggregateSignature, SerzDeserzError> {
-        Ok(AggregateSignature {
-            point: get_G1_point_from_bytes(sig_bytes)?
+    /// Instatiate an AggregateSignature from some bytes.
+    ///
+    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
+    pub fn from_bytes(bytes: &[u8])
+        -> Result<AggregateSignature, DecodeError>
+    {
+        if bytes.len() != G1_BYTE_SIZE {
+            return Err(DecodeError::IncorrectSize)
+        }
+        Ok(Self {
+            point: GroupG1::frombytes(bytes)
         })
     }
-    */
 
     /// Export (serialize) the AggregateSignature to bytes.
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn to_bytes(&self) -> Vec<u8> {
-        get_bytes_for_G1_point(&self.point)
+        let mut temp = GroupG1::new();
+        temp.copy(&self.point);
+        let mut bytes: [u8; G1_BYTE_SIZE] = [0; G1_BYTE_SIZE];
+        temp.tobytes(&mut bytes, false);
+        bytes.to_vec()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::keys::SecretKey;
+    use super::super::keys::{
+        SecretKey,
+        Keypair,
+    };
 
     fn map_secret_bytes_to_keypairs(secret_key_bytes: Vec<Vec<u8>>)
         -> Vec<Keypair>
