@@ -1,9 +1,9 @@
 extern crate amcl;
 extern crate rand;
+extern crate blake2_rfc;
 
-use BLSCurve::mpin::{SHA256, hash_id};
+use self::blake2_rfc::blake2b::blake2b;
 use BLSCurve::pair::{ate, fexp};
-// use super::constants::MOD_BYTE_SIZE;
 use self::amcl::arch::Chunk;
 use BLSCurve::rom;
 use BLSCurve::big::{NLEN, MODBYTES as bls381_MODBYTES};
@@ -33,9 +33,8 @@ lazy_static! {
 }
 
 pub fn hash_on_g1(msg: &[u8]) -> GroupG1 {
-    let mut h: [u8; MOD_BYTE_SIZE] = [0; MOD_BYTE_SIZE];
-    hash_id(SHA256, msg, &mut h);
-    GroupG1::mapit(&h)
+    let result = blake2b(64, &[], &msg);
+    GroupG1::mapit(&result.as_bytes()[0..MODBYTES])
 }
 
 pub fn ate_pairing(point_g2: &GroupG2, point_g1: &GroupG1) -> FP12 {

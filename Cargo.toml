@@ -6,6 +6,7 @@ description = "Various signature schemes. BLS, MuSig"
 license = "MIT/Apache-2.0"
 
 [dependencies]
+blake2-rfc = "0.2.18"
 rand = "0.5.3"
 lazy_static = "1.0"
 amcl = { path = "./amcl" }
