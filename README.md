@@ -1,10 +1,18 @@
-# Rust library for various signatures like Aggregate signatures, Multi signatures.
+# BLS12-381 Aggregate Signatures in Rust using Apache Milagro
 
-Uses the [The Apache Milagro Cryptographic Library](https://github.com/milagro-crypto/amcl)
+**WARNING: This is an experiemental library and the cryptography is NOT SAFE!**
 
-## Supported schemes
-1. BLS signatures from [Compact Multi-Signatures for Smaller Blockchains](https://eprint.iacr.org/2018/483.pdf) by Dan Boneh, Manu Drijvers and Gregory Neven.
-   Used BLS12-381 curve from Apache Milagro. [Signing and verification API](./src/bls/README.md)
+Uses the [The Apache Milagro Cryptographic Library](https://github.com/milagro-crypto/amcl).
+
+This crate is heavily based upon work by
+[@lovesh](https://github.com/lovesh).
+
+Presently this library only supports features required for Ethereum 2.0
+signature validation. The aggregation methods here are vulnerable to the
+rouge-key attack.
+
+There has been no public audit or scrutiny placed upon this crate. If you're a
+cryptographer I would love to have your input.
 
 ## Usage
 
