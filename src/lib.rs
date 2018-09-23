@@ -8,6 +8,7 @@ mod signature;
 mod aggregates;
 mod errors;
 mod g1;
+mod g2;
 mod amcl_utils;
 mod rng;
 

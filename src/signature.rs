@@ -34,7 +34,7 @@ impl Signature {
         }
         let msg_hash_point = hash_on_g1(msg);
         let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
-        let mut rhs = ate_pairing(&pk.point, &msg_hash_point);
+        let mut rhs = ate_pairing(&pk.point.as_raw(), &msg_hash_point);
         lhs.equals(&mut rhs)
     }
 

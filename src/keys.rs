@@ -3,13 +3,12 @@ extern crate rand;
 
 use super::amcl_utils::{
     BigNum,
-    GroupG2,
     CURVE_ORDER,
     GeneratorG2,
     MODBYTES,
-    G2_BYTE_SIZE,
     MOD_BYTE_SIZE,
 };
+use super::g2::G2Point;
 use super::rng::get_seeded_rng;
 use super::errors::DecodeError;
 
@@ -51,15 +50,16 @@ impl SecretKey {
 }
 
 /// A BLS public key.
+#[derive(Debug, Clone)]
 pub struct PublicKey {
-    pub point: GroupG2
+    pub point: G2Point
 }
 
 impl PublicKey {
     /// Instantiate a PublicKey from some SecretKey.
     pub fn from_secret_key(sk: &SecretKey) -> Self {
         PublicKey {
-            point: GeneratorG2.mul(&sk.x),
+            point: G2Point::from_raw(GeneratorG2.mul(&sk.x)),
         }
     }
 
@@ -67,32 +67,13 @@ impl PublicKey {
     pub fn from_bytes(bytes: &[u8])
         -> Result<PublicKey, DecodeError>
     {
-        if bytes.len() != G2_BYTE_SIZE {
-            Err(DecodeError::IncorrectSize)
-        } else {
-            Ok(Self {
-                point: GroupG2::frombytes(bytes)
-            })
-        }
+        let point = G2Point::from_bytes(bytes)?;
+        Ok(Self{ point })
     }
 
     /// Export the PublicKey to some bytes.
     pub fn as_bytes(&self) -> Vec<u8> {
-        let mut temp = GroupG2::new();
-        temp.copy(&self.point);
-        let mut bytes: [u8; G2_BYTE_SIZE] = [0; G2_BYTE_SIZE];
-        temp.tobytes(&mut bytes);
-        bytes.to_vec()
-    }
-}
-
-impl Clone for PublicKey {
-    fn clone(&self) -> PublicKey {
-        let mut temp_v = GroupG2::new();
-        temp_v.copy(&self.point);
-        PublicKey {
-            point: temp_v
-        }
+        self.point.as_bytes()
     }
 }
 

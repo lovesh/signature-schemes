@@ -1,13 +1,12 @@
 extern crate amcl;
 
 use super::amcl_utils::{
-    GroupG2,
     GeneratorG2,
-    G2_BYTE_SIZE,
     hash_on_g1,
     ate_pairing
 };
 use super::g1::G1Point;
+use super::g2::G2Point;
 use super::keys::PublicKey;
 use super::signature::Signature;
 use super::errors::DecodeError;
@@ -16,7 +15,7 @@ use super::errors::DecodeError;
 ///
 /// This may be used to verify some AggregateSignature.
 pub struct AggregatePublicKey {
-    pub point: GroupG2
+    pub point: G2Point
 }
 
 impl AggregatePublicKey {
@@ -26,7 +25,7 @@ impl AggregatePublicKey {
     pub fn new()
         -> Self
     {
-        let mut point: GroupG2 = GroupG2::new();
+        let mut point = G2Point::new();
         // TODO: check why this inf call
         point.inf();
         Self {
@@ -59,24 +58,15 @@ impl AggregatePublicKey {
     pub fn from_bytes(bytes: &[u8])
         -> Result<AggregatePublicKey, DecodeError>
     {
-        if bytes.len() != G2_BYTE_SIZE {
-            Err(DecodeError::IncorrectSize)
-        } else {
-            Ok(AggregatePublicKey{
-                point: GroupG2::frombytes(bytes)
-            })
-        }
+        let point = G2Point::from_bytes(bytes)?;
+        Ok(Self{ point })
     }
 
     /// Export the AggregatePublicKey to bytes.
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn as_bytes(&self) -> Vec<u8> {
-        let mut temp = GroupG2::new();
-        temp.copy(&self.point);
-        let mut bytes: [u8; G2_BYTE_SIZE] = [0; G2_BYTE_SIZE];
-        temp.tobytes(&mut bytes);
-        bytes.to_vec()
+        self.point.as_bytes()
     }
 }
 
@@ -125,7 +115,7 @@ impl AggregateSignature {
         }
         let msg_hash_point = hash_on_g1(msg);
         let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
-        let mut rhs = ate_pairing(&avk.point, &msg_hash_point);
+        let mut rhs = ate_pairing(&avk.point.as_raw(), &msg_hash_point);
         lhs.equals(&mut rhs)
     }
 
