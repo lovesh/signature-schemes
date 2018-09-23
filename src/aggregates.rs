@@ -1,18 +1,16 @@
 extern crate amcl;
 
 use super::amcl_utils::{
-    GroupG1,
     GroupG2,
     GeneratorG2,
-    G1_BYTE_SIZE,
     G2_BYTE_SIZE,
     hash_on_g1,
     ate_pairing
 };
+use super::g1::G1Point;
 use super::keys::PublicKey;
 use super::signature::Signature;
 use super::errors::DecodeError;
-use std::fmt;
 
 /// Allows for the adding/combining of multiple BLS PublicKeys.
 ///
@@ -91,8 +89,9 @@ impl Default for AggregatePublicKey {
 /// Allows for the adding/combining of multiple BLS Signatures.
 ///
 /// This may be verified against some AggregatePublicKey.
+#[derive(Debug, Clone)]
 pub struct AggregateSignature {
-    pub point: GroupG1
+    pub point: G1Point
 }
 
 impl AggregateSignature {
@@ -100,7 +99,7 @@ impl AggregateSignature {
     ///
     /// The underlying point will be set to infinity.
     pub fn new() -> Self {
-        let mut point = GroupG1::new();
+        let mut point = G1Point::new();
         // TODO: check why this inf call
         point.inf();
         Self {
@@ -125,7 +124,7 @@ impl AggregateSignature {
             return false;
         }
         let msg_hash_point = hash_on_g1(msg);
-        let mut lhs = ate_pairing(&GeneratorG2, &self.point);
+        let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
         let mut rhs = ate_pairing(&avk.point, &msg_hash_point);
         lhs.equals(&mut rhs)
     }
@@ -136,31 +135,15 @@ impl AggregateSignature {
     pub fn from_bytes(bytes: &[u8])
         -> Result<AggregateSignature, DecodeError>
     {
-        if bytes.len() != G1_BYTE_SIZE {
-            return Err(DecodeError::IncorrectSize)
-        }
-        Ok(Self {
-            point: GroupG1::frombytes(bytes)
-        })
+        let point = G1Point::from_bytes(bytes)?;
+        Ok(Self{ point })
     }
 
     /// Export (serialize) the AggregateSignature to bytes.
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn as_bytes(&self) -> Vec<u8> {
-        let mut temp = GroupG1::new();
-        temp.copy(&self.point);
-        let mut bytes: [u8; G1_BYTE_SIZE] = [0; G1_BYTE_SIZE];
-        temp.tobytes(&mut bytes, false);
-        bytes.to_vec()
-    }
-}
-
-impl fmt::Debug for AggregateSignature {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut temp = GroupG1::new();
-        temp.copy(&self.point);
-        write!(f, "{}", temp.tostring())
+        self.point.as_bytes()
     }
 }
 

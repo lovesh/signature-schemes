@@ -7,6 +7,7 @@ mod keys;
 mod signature;
 mod aggregates;
 mod errors;
+mod g1;
 mod amcl_utils;
 mod rng;
 

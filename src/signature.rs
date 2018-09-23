@@ -1,38 +1,29 @@
 extern crate amcl;
 
 use super::amcl_utils::{
-    GroupG1,
     hash_on_g1,
     ate_pairing,
     GeneratorG2,
-    G1_BYTE_SIZE,
 };
 use super::keys::{
     SecretKey,
     PublicKey,
 };
+use super::g1::G1Point;
 use super::errors::DecodeError;
 
+#[derive(Debug, Clone)]
 pub struct Signature {
-    pub point: GroupG1,
-}
-
-impl Clone for Signature {
-    fn clone(&self) -> Signature {
-        let mut temp_s = GroupG1::new();
-        temp_s.copy(&self.point);
-        Signature {
-            point: temp_s
-        }
-    }
+    pub point: G1Point,
 }
 
 impl Signature {
-    // Signature = H_0(msg) * sk
     pub fn new(msg: &[u8], sk: &SecretKey) -> Self {
         let hash_point = hash_on_g1(msg);
         let sig = hash_point.mul(&sk.x);
-        Signature { point: sig }
+        Self {
+            point: G1Point::from_raw(sig)
+        }
     }
 
     pub fn verify(&self, msg: &[u8], pk: &PublicKey) -> bool {
@@ -42,7 +33,7 @@ impl Signature {
             return false;
         }
         let msg_hash_point = hash_on_g1(msg);
-        let mut lhs = ate_pairing(&GeneratorG2, &self.point);
+        let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
         let mut rhs = ate_pairing(&pk.point, &msg_hash_point);
         lhs.equals(&mut rhs)
     }
@@ -50,27 +41,17 @@ impl Signature {
     pub fn from_bytes(bytes: &[u8])
         -> Result<Signature, DecodeError>
     {
-        if bytes.len() != G1_BYTE_SIZE {
-            return Err(DecodeError::IncorrectSize)
-        }
-        Ok(Self {
-            point: GroupG1::frombytes(bytes)
-        })
+        let point = G1Point::from_bytes(bytes)?;
+        Ok(Self{ point })
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
-        let mut temp = GroupG1::new();
-        temp.copy(&self.point);
-        let mut bytes: [u8; G1_BYTE_SIZE] = [0; G1_BYTE_SIZE];
-        temp.tobytes(&mut bytes, false);
-        bytes.to_vec()
+        self.point.as_bytes()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // TODO: Add tests for failure
-    // TODO: Add more test vectors
     use super::*;
     use super::super::keys::Keypair;
 
@@ -99,7 +80,7 @@ mod tests {
              */
             let sig_bytes = sig.as_bytes();
             let mut new_sig = Signature::from_bytes(&sig_bytes).unwrap();
-            assert_eq!(&sig.point.tostring(), &new_sig.point.tostring());
+            assert_eq!(&sig.as_bytes(), &new_sig.as_bytes());
             assert!(new_sig.verify(&bytes, &vk));
         }
     }
@@ -116,16 +97,5 @@ mod tests {
         assert_eq!(sig.verify(&msg.as_bytes(), &vk), false);
         msg = "";
         assert_eq!(sig.verify(&msg.as_bytes(), &vk), false);
-    }
-
-    #[test]
-    fn signature_at_infinity() {
-        let keypair = Keypair::random();
-        let vk = keypair.pk;
-
-        let msg = "Small msg".as_bytes();
-        let mut sig = Signature { point: GroupG1::new() };
-        sig.point.inf();
-        assert_eq!(sig.verify(&msg, &vk), false);
     }
 }
