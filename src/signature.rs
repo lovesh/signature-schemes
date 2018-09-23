@@ -18,6 +18,7 @@ pub struct Signature {
 }
 
 impl Signature {
+    /// Instantiate a new Signature from a message and a SecretKey.
     pub fn new(msg: &[u8], sk: &SecretKey) -> Self {
         let hash_point = hash_on_g1(msg);
         let sig = hash_point.mul(&sk.x);
@@ -26,6 +27,10 @@ impl Signature {
         }
     }
 
+    /// Verify the Signature against a PublicKey.
+    ///
+    /// In theory, should only return true if the PublicKey matches the SecretKey used to
+    /// instantiate the Signature.
     pub fn verify(&self, msg: &[u8], pk: &PublicKey) -> bool {
         // TODO: Check if point exists on curve, maybe use `ECP::new_big`
         // and x cord of verkey
@@ -38,6 +43,7 @@ impl Signature {
         lhs.equals(&mut rhs)
     }
 
+    /// Instantiate a Signature from a serialized Signature.
     pub fn from_bytes(bytes: &[u8])
         -> Result<Signature, DecodeError>
     {
@@ -45,6 +51,7 @@ impl Signature {
         Ok(Self{ point })
     }
 
+    /// Serialize the Signature.
     pub fn as_bytes(&self) -> Vec<u8> {
         self.point.as_bytes()
     }
