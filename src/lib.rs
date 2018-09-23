@@ -4,8 +4,6 @@ extern crate rand;
 mod keys;
 mod signature;
 mod aggregates;
-mod types;
-mod constants;
 mod errors;
 mod amcl_utils;
 mod rng;

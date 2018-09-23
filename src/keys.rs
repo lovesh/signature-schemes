@@ -1,11 +1,9 @@
 extern crate amcl;
 extern crate rand;
 
-use super::types::{
+use super::amcl_utils::{
     BigNum,
-    GroupG2
-};
-use super::constants::{
+    GroupG2,
     CURVE_ORDER,
     GeneratorG2,
     MODBYTES,
@@ -70,7 +68,7 @@ impl PublicKey {
         -> Result<PublicKey, DecodeError>
     {
         if bytes.len() != G2_BYTE_SIZE {
-            return Err(DecodeError::IncorrectSize);
+            Err(DecodeError::IncorrectSize)
         } else {
             Ok(Self {
                 point: GroupG2::frombytes(bytes)

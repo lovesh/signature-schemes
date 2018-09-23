@@ -1,8 +1,9 @@
 extern crate amcl;
 
-use super::amcl_utils::{hash_on_g1, ate_pairing};
-use super::types::GroupG1;
-use super::constants::{
+use super::amcl_utils::{
+    GroupG1,
+    hash_on_g1,
+    ate_pairing,
     GeneratorG2,
     G1_BYTE_SIZE,
 };

@@ -1,11 +1,13 @@
 extern crate amcl;
 
-use super::amcl_utils::{hash_on_g1, ate_pairing};
-use super::types::{GroupG1, GroupG2};
-use super::constants::{
+use super::amcl_utils::{
+    GroupG1,
+    GroupG2,
     GeneratorG2,
     G1_BYTE_SIZE,
     G2_BYTE_SIZE,
+    hash_on_g1,
+    ate_pairing
 };
 use super::keys::PublicKey;
 use super::signature::Signature;
@@ -59,7 +61,7 @@ impl AggregatePublicKey {
         -> Result<AggregatePublicKey, DecodeError>
     {
         if bytes.len() != G2_BYTE_SIZE {
-            return Err(DecodeError::IncorrectSize);
+            Err(DecodeError::IncorrectSize)
         } else {
             Ok(AggregatePublicKey{
                 point: GroupG2::frombytes(bytes)
@@ -76,6 +78,12 @@ impl AggregatePublicKey {
         let mut bytes: [u8; G2_BYTE_SIZE] = [0; G2_BYTE_SIZE];
         temp.tobytes(&mut bytes);
         bytes.to_vec()
+    }
+}
+
+impl Default for AggregatePublicKey {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -144,6 +152,12 @@ impl AggregateSignature {
         let mut bytes: [u8; G1_BYTE_SIZE] = [0; G1_BYTE_SIZE];
         temp.tobytes(&mut bytes, false);
         bytes.to_vec()
+    }
+}
+
+impl Default for AggregateSignature {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
