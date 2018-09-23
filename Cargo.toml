@@ -1,5 +1,5 @@
 [package]
-name = "multi-sigs"
+name = "bls-aggregates"
 version = "0.2.0"
 authors = ["Lovesh Harchandani <lovesh.bond@gmail.com>"]
 description = "Various signature schemes. BLS, MuSig"
