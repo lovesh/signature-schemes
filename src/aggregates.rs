@@ -12,6 +12,7 @@ use super::amcl_utils::{
 use super::keys::PublicKey;
 use super::signature::Signature;
 use super::errors::DecodeError;
+use std::fmt;
 
 /// Allows for the adding/combining of multiple BLS PublicKeys.
 ///
@@ -154,6 +155,15 @@ impl AggregateSignature {
         bytes.to_vec()
     }
 }
+
+impl fmt::Debug for AggregateSignature {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut temp = GroupG1::new();
+        temp.copy(&self.point);
+        write!(f, "{}", temp.tostring())
+    }
+}
+
 
 impl Default for AggregateSignature {
     fn default() -> Self {
