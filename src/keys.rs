@@ -11,6 +11,7 @@ use super::amcl_utils::{
 use super::g2::G2Point;
 use super::rng::get_seeded_rng;
 use super::errors::DecodeError;
+use std::fmt;
 
 #[derive(Clone)]
 /// A BLS secret key.
@@ -49,6 +50,14 @@ impl SecretKey {
     }
 }
 
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut temp = BigNum::new();
+        temp.copy(&self.x);
+        write!(f, "{}", temp.tostring())
+    }
+}
+
 /// A BLS public key.
 #[derive(Debug, Clone)]
 pub struct PublicKey {
@@ -78,7 +87,7 @@ impl PublicKey {
 }
 
 /// A helper which stores a BLS public and private key pair.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Keypair {
     pub sk: SecretKey,
     pub pk: PublicKey
