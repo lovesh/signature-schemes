@@ -1,5 +1,7 @@
 # API
 
+**NOTE: This document is out-of-date**
+
 #### Generate keys
 ```
 let keypair = Keypair::new(None);
