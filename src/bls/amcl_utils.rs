@@ -9,16 +9,18 @@ use self::amcl::arch::Chunk;
 use BLSCurve::mpin::{SHA256, hash_id};
 use BLSCurve::pair::{ate, fexp};
 use super::types::{BigNum, GroupG1, GroupG2, FP12};
-use super::super::utils::get_seeded_RNG;
+// use super::super::utils::get_seeded_RNG;
 use bls::constants::{GroupG2_SIZE, GroupG1_SIZE, MODBYTES};
 use bls::errors::SerzDeserzError;
 
+/*
 pub fn random_big_number(order: &[Chunk], rng: Option<EntropyRng>) -> BigNum {
     // initialise from at least 128 byte string of raw random entropy
     let entropy_size = 256;
     let mut r = get_seeded_RNG(entropy_size, rng);
     BigNum::randomnum(&BigNum::new_ints(&order), &mut r)
 }
+*/
 
 
 pub fn hash_on_GroupG1(msg: &[u8]) -> GroupG1 {

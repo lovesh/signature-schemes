@@ -13,6 +13,9 @@ pub const GroupG1_SIZE: usize = (2 * MODBYTES + 1) as usize;
 // Byte size of element in group G2
 pub const GroupG2_SIZE: usize = (4 * MODBYTES) as usize;
 
+pub const G1_BYTE_SIZE: usize = (2 * MODBYTES + 1) as usize;
+pub const G2_BYTE_SIZE: usize = (4 * MODBYTES) as usize;
+
 lazy_static! {
     pub static ref GeneratorG1: GroupG1 = GroupG1::generator();
     pub static ref GeneratorG2: GroupG2 = GroupG2::generator();
