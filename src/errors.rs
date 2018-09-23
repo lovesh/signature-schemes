@@ -4,6 +4,7 @@ pub enum SerzDeserzError {
     BigNumBytesIncorrectSize(usize, usize)
 }
 
+#[derive(Debug)]
 pub enum DecodeError {
     IncorrectSize,
 }

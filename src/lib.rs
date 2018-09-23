@@ -16,6 +16,11 @@ pub use aggregates::{
     AggregateSignature,
     AggregatePublicKey,
 };
+pub use keys::{
+    SecretKey,
+    PublicKey,
+    Keypair,
+};
 
 #[macro_use]
 extern crate lazy_static;

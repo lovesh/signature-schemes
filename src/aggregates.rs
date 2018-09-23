@@ -151,7 +151,7 @@ mod tests {
         let mut keypairs = vec![];
         for bytes in secret_key_bytes {
             let sk = SecretKey::from_bytes(&bytes).unwrap();
-            let pk = PublicKey::from_sigkey(&sk);
+            let pk = PublicKey::from_secret_key(&sk);
             keypairs.push(Keypair{sk, pk})
         }
         keypairs
