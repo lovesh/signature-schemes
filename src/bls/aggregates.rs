@@ -11,19 +11,20 @@ use super::keys::{
     Keypair
 };
 use super::signature::Signature;
-use bls::errors::{
-    // SerzDeserzError,
-    DecodeError,
-};
+use bls::errors::DecodeError;
 use bls::amcl_utils::get_bytes_for_G1_point;
 
-/// The result of adding multiple PublicKeys.
+/// Allows for the adding/combining of multiple BLS PublicKeys.
+///
+/// This may be used to verify some AggregateSignature.
 pub struct AggregatePublicKey {
     pub point: GroupG2
 }
 
 impl AggregatePublicKey {
-    /// Create an aggregate public key from a vector of existing PublicKeys.
+    /// Instantiate a new aggregate public key.
+    ///
+    /// The underlying point will be set to infinity.
     pub fn new()
         -> Self
     {
@@ -35,6 +36,9 @@ impl AggregatePublicKey {
         }
     }
 
+    /// Instantiate a new aggregate public key from a vector of PublicKeys.
+    ///
+    /// This is a helper method combining the `new()` and `add()` functions.
     pub fn from_public_keys(keys: &Vec<PublicKey>)
         -> Self
     {
@@ -45,6 +49,7 @@ impl AggregatePublicKey {
         agg_key
     }
 
+    /// Add a PublicKey to the AggregatePublicKey.
     pub fn add(&mut self, public_key: &PublicKey) {
         self.point.add(&public_key.point);
         /*
@@ -54,7 +59,9 @@ impl AggregatePublicKey {
         self.point.tostring();
     }
 
-    /// Instantiate an aggregate public key from some serialized bytes.
+    /// Instantiate an AggregatePublicKey from some serialized bytes.
+    ///
+    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn from_bytes(bytes: &[u8])
         -> Result<AggregatePublicKey, DecodeError>
     {
@@ -67,6 +74,9 @@ impl AggregatePublicKey {
         }
     }
 
+    /// Export the AggregatePublicKey to bytes.
+    ///
+    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut temp = GroupG2::new();
         temp.copy(&self.point);
@@ -76,11 +86,17 @@ impl AggregatePublicKey {
     }
 }
 
+/// Allows for the adding/combining of multiple BLS Signatures.
+///
+/// This may be verified against some AggregatePublicKey.
 pub struct AggregateSignature {
     pub point: GroupG1
 }
 
 impl AggregateSignature {
+    /// Instantiates a new AggregateSignature.
+    ///
+    /// The underlying point will be set to infinity.
     pub fn new() -> Self {
         let mut point = GroupG1::new();
         // TODO: check why this inf call
@@ -90,6 +106,7 @@ impl AggregateSignature {
         }
     }
 
+    /// Add a Signature to the AggregateSignature.
     pub fn add(&mut self, signature: &Signature) {
         self.point.add(&signature.point);
         /*
@@ -99,13 +116,17 @@ impl AggregateSignature {
         self.point.tostring();
     }
 
+    /// Verify this AggregateSignature against an AggregatePublicKey.
+    ///
+    /// All PublicKeys which signed across this AggregateSignature must be included in the
+    /// AggregatePublicKey, otherwise verification will fail.
     pub fn verify(&self, msg: &[u8], avk: &AggregatePublicKey)
         -> bool
     {
         if self.point.is_infinity() {
             return false;
         }
-        let mut msg_hash_point = hash_on_GroupG1(msg);
+        let msg_hash_point = hash_on_GroupG1(msg);
         let mut lhs = ate_pairing(&GeneratorG2, &self.point);
         let mut rhs = ate_pairing(&avk.point, &msg_hash_point);
         lhs.equals(&mut rhs)
@@ -119,6 +140,9 @@ impl AggregateSignature {
     }
     */
 
+    /// Export (serialize) the AggregateSignature to bytes.
+    ///
+    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn to_bytes(&self) -> Vec<u8> {
         get_bytes_for_G1_point(&self.point)
     }
@@ -188,6 +212,8 @@ mod tests {
             let subset_agg_key = AggregatePublicKey::
                 from_public_keys(&subset_pub_keys);
             assert!(agg_signature.verify(&message, &subset_agg_key));
+
+            // TODO: test superset of pub keys.
 
             /*
              * A set of keys which did not sign the message at all should fail
