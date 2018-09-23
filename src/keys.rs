@@ -42,7 +42,7 @@ impl SecretKey {
     }
 
     /// Export the SecretKey to bytes.
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         let mut temp = BigNum::new_copy(&self.x);
         let mut bytes: [u8; MODBYTES] = [0; MODBYTES];
         temp.tobytes(&mut bytes);
@@ -77,7 +77,7 @@ impl PublicKey {
     }
 
     /// Export the PublicKey to some bytes.
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         let mut temp = GroupG2::new();
         temp.copy(&self.point);
         let mut bytes: [u8; G2_BYTE_SIZE] = [0; G2_BYTE_SIZE];
@@ -130,7 +130,7 @@ mod tests {
             117, 181, 75, 96, 238, 79, 100, 237, 59, 140, 111
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
-        let decoded_sk = sk.to_bytes();
+        let decoded_sk = sk.as_bytes();
         assert_eq!(decoded_sk, sk_bytes);
     }
 
@@ -144,9 +144,9 @@ mod tests {
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
         let pk = PublicKey::from_secret_key(&sk);
-        let decoded_pk = pk.to_bytes();
+        let decoded_pk = pk.as_bytes();
         let encoded_pk = PublicKey::from_bytes(&decoded_pk).unwrap();
-        let re_recoded_pk = encoded_pk.to_bytes();
+        let re_recoded_pk = encoded_pk.as_bytes();
         assert_eq!(decoded_pk, re_recoded_pk);
     }
 
@@ -165,7 +165,7 @@ mod tests {
         let signature = Signature::new(&message, &sk);
         assert!(signature.verify(&message, &pk));
 
-        let pk_bytes = pk.to_bytes();
+        let pk_bytes = pk.as_bytes();
         let pk = PublicKey::from_bytes(&pk_bytes).unwrap();
         assert!(signature.verify(&message, &pk));
     }

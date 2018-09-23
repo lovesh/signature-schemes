@@ -146,7 +146,7 @@ impl AggregateSignature {
     /// Export (serialize) the AggregateSignature to bytes.
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         let mut temp = GroupG1::new();
         temp.copy(&self.point);
         let mut bytes: [u8; G1_BYTE_SIZE] = [0; G1_BYTE_SIZE];
@@ -168,6 +168,47 @@ mod tests {
         SecretKey,
         Keypair,
     };
+
+    #[test]
+    fn test_aggregate_serialization() {
+        let signing_secret_key_bytes = vec![
+            vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98,
+            161, 50, 32, 254, 87, 16, 25, 167, 79, 192, 116, 176, 74,
+            164, 217, 40, 57, 179, 15, 19, 21, 240, 100, 70, 127, 111,
+            170, 129, 137, 42, 53],
+            vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 53,
+            72, 211, 104, 184, 68, 142, 208, 115, 22, 156, 97, 28,
+            216, 228, 102, 4, 218, 116, 226, 166, 131, 67, 7, 40, 55,
+            157, 167, 157, 127, 143, 13],
+        ];
+        let signing_keypairs: Vec<Keypair> = signing_secret_key_bytes
+            .iter()
+            .map(|bytes| {
+                let sk = SecretKey::from_bytes(&bytes).unwrap();
+                let pk = PublicKey::from_secret_key(&sk);
+                Keypair{ sk, pk }
+            }).collect();
+
+        let message = "cats".as_bytes();
+
+        let mut agg_sig = AggregateSignature::new();
+        let mut agg_pub_key = AggregatePublicKey::new();
+        for keypair in &signing_keypairs {
+            let sig = Signature::new(&message, &keypair.sk);
+            agg_sig.add(&sig);
+            agg_pub_key.add(&keypair.pk);
+        }
+        let agg_sig_bytes = agg_sig.as_bytes();
+        let agg_pub_bytes = agg_pub_key.as_bytes();
+
+        let agg_sig = AggregateSignature::
+            from_bytes(&agg_sig_bytes).unwrap();
+        let agg_pub_key = AggregatePublicKey::
+            from_bytes(&agg_pub_bytes).unwrap();
+
+
+        assert!(agg_sig.verify(&message, &agg_pub_key));
+    }
 
     fn map_secret_bytes_to_keypairs(secret_key_bytes: Vec<Vec<u8>>)
         -> Vec<Keypair>

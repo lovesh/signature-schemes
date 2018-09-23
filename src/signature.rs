@@ -58,7 +58,7 @@ impl Signature {
         })
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         let mut temp = GroupG1::new();
         temp.copy(&self.point);
         let mut bytes: [u8; G1_BYTE_SIZE] = [0; G1_BYTE_SIZE];
@@ -97,7 +97,7 @@ mod tests {
             /*
              * Test serializing, then deserializing the signature
              */
-            let sig_bytes = sig.to_bytes();
+            let sig_bytes = sig.as_bytes();
             let mut new_sig = Signature::from_bytes(&sig_bytes).unwrap();
             assert_eq!(&sig.point.tostring(), &new_sig.point.tostring());
             assert!(new_sig.verify(&bytes, &vk));
