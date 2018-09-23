@@ -22,3 +22,4 @@ pub use keys::{
     Keypair,
 };
 pub use signature::Signature;
+pub use errors::DecodeError;
