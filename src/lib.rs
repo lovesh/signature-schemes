@@ -1,12 +1,21 @@
+extern crate amcl;
 extern crate rand;
 
-pub mod bls;
-mod utils;
+mod keys;
+mod signature;
+mod aggregates;
+mod types;
+mod constants;
+mod errors;
+mod amcl_utils;
+mod rng;
 
-pub use bls::*;
+use self::amcl::bls381 as BLSCurve;
+
+pub use aggregates::{
+    AggregateSignature,
+    AggregatePublicKey,
+};
 
 #[macro_use]
 extern crate lazy_static;
-
-#[macro_use]
-extern crate log;

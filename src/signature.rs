@@ -7,9 +7,9 @@ use super::keys::{
     SecretKey,
     PublicKey,
 };
-use bls::errors::SerzDeserzError;
-use bls::amcl_utils::get_G1_point_from_bytes;
-use bls::amcl_utils::get_bytes_for_G1_point;
+use super::errors::SerzDeserzError;
+use super::amcl_utils::get_G1_point_from_bytes;
+use super::amcl_utils::get_bytes_for_G1_point;
 
 pub struct Signature {
     pub point: GroupG1,

@@ -15,8 +15,8 @@ use super::constants::{
     GeneratorG2,
     MODBYTES
 };
-use super::utils::get_seeded_rng;
-use bls::errors::SerzDeserzError;
+use super::rng::get_seeded_rng;
+use super::errors::SerzDeserzError;
 
 #[derive(Clone)]
 pub struct SecretKey {
@@ -108,11 +108,8 @@ mod tests {
         let sk2 = SecretKey::random();
         for mut sk in vec![sk1, sk2] {
             let mut vk1 = PublicKey::from_sigkey(&sk);
-            debug!("{}", sk.x.tostring());
-            debug!("{}", &vk1.point.tostring());
 
             let mut vk2 = PublicKey::from_sigkey(&sk);
-            debug!("{}", &vk2.point.tostring());
 
             assert_eq!(&vk1.point.tostring(), &vk2.point.tostring());
 

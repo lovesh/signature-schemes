@@ -11,8 +11,8 @@ use super::keys::{
     Keypair
 };
 use super::signature::Signature;
-use bls::errors::DecodeError;
-use bls::amcl_utils::get_bytes_for_G1_point;
+use super::errors::DecodeError;
+use super::amcl_utils::get_bytes_for_G1_point;
 
 /// Allows for the adding/combining of multiple BLS PublicKeys.
 ///

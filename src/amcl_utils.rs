@@ -10,8 +10,8 @@ use BLSCurve::mpin::{SHA256, hash_id};
 use BLSCurve::pair::{ate, fexp};
 use super::types::{BigNum, GroupG1, GroupG2, FP12};
 // use super::super::utils::get_seeded_RNG;
-use bls::constants::{GroupG2_SIZE, GroupG1_SIZE, MODBYTES};
-use bls::errors::SerzDeserzError;
+use super::constants::{GroupG2_SIZE, GroupG1_SIZE, MODBYTES};
+use super::errors::SerzDeserzError;
 
 /*
 pub fn random_big_number(order: &[Chunk], rng: Option<EntropyRng>) -> BigNum {
