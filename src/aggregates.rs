@@ -242,6 +242,17 @@ mod tests {
             assert!(agg_signature.verify(&message, &signing_agg_pub));
 
             /*
+             * The signature should fail if an extra key has signed the
+             * aggregate signature.
+             */
+            let mut super_set_agg_sig = agg_signature.clone();
+            let extra_sig = Signature::new(
+                &message,
+                &non_signing_kps[0].sk);
+            super_set_agg_sig.add(&extra_sig);
+            assert!(!super_set_agg_sig.verify(&message, &signing_agg_pub));
+
+            /*
              * A subset of signed keys should fail verification.
              */
             let mut subset_pub_keys = signing_kps_subset.iter().map(|kp| kp.pk.clone()).collect();
