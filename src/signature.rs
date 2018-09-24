@@ -12,7 +12,7 @@ use super::keys::{
 use super::g1::G1Point;
 use super::errors::DecodeError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Signature {
     pub point: G1Point,
 }

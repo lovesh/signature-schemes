@@ -58,8 +58,14 @@ impl fmt::Debug for SecretKey {
     }
 }
 
+impl PartialEq for SecretKey {
+    fn eq(&self, other: &SecretKey) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
 /// A BLS public key.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PublicKey {
     pub point: G2Point
 }
@@ -87,7 +93,7 @@ impl PublicKey {
 }
 
 /// A helper which stores a BLS public and private key pair.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Keypair {
     pub sk: SecretKey,
     pub pk: PublicKey

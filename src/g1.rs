@@ -89,3 +89,10 @@ impl Clone for G1Point {
         }
     }
 }
+
+impl PartialEq for G1Point {
+    fn eq(&self, other: &G1Point) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
+

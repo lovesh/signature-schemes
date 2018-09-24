@@ -14,6 +14,7 @@ use super::errors::DecodeError;
 /// Allows for the adding/combining of multiple BLS PublicKeys.
 ///
 /// This may be used to verify some AggregateSignature.
+#[derive(Debug, Clone, PartialEq)]
 pub struct AggregatePublicKey {
     pub point: G2Point
 }
