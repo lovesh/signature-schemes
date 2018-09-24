@@ -242,7 +242,43 @@ mod tests {
             assert!(agg_signature.verify(&message, &signing_agg_pub));
 
             /*
-             * The signature should fail if an extra key has signed the
+             * The full set of signed keys aggregated in reverse order
+             * should pass verification.
+             */
+            let mut rev_signing_agg_pub = AggregatePublicKey::new();
+            for i in (0..signing_kps.len()).rev() {
+                let keypair = signing_kps[i].clone();
+                rev_signing_agg_pub.add(&keypair.pk);
+            }
+            assert!(agg_signature.verify(&message, &rev_signing_agg_pub));
+
+            /*
+             * The full set of signed keys aggregated in non-sequential
+             * order should pass verification.
+             */
+            let mut shuffled_signing_agg_pub = AggregatePublicKey::new();
+            let n = signing_kps.len();
+            let mut order: Vec<usize> = ((n/2)..n).collect();
+            order.append(&mut (0..(n/2)).collect());
+            for i in 0..signing_kps.len() {
+                let keypair = signing_kps[i].clone();
+                shuffled_signing_agg_pub.add(&keypair.pk);
+            }
+            assert!(agg_signature.verify(&message, &shuffled_signing_agg_pub));
+
+            /*
+             * The signature should fail if an signing key has double-signed the
+             * aggregate signature.
+             */
+            let mut double_sig_agg_sig = agg_signature.clone();
+            let extra_sig = Signature::new(
+                &message,
+                &signing_kps[0].sk);
+            double_sig_agg_sig.add(&extra_sig);
+            assert!(!double_sig_agg_sig.verify(&message, &signing_agg_pub));
+
+            /*
+             * The signature should fail if an extra, non-signing key has signed the
              * aggregate signature.
              */
             let mut super_set_agg_sig = agg_signature.clone();
@@ -264,8 +300,6 @@ mod tests {
             let subset_agg_key = AggregatePublicKey::
                 from_public_keys(&subset_pub_keys);
             assert!(agg_signature.verify(&message, &subset_agg_key));
-
-            // TODO: test superset of pub keys.
 
             /*
              * A set of keys which did not sign the message at all should fail
