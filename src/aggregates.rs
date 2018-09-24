@@ -80,7 +80,7 @@ impl Default for AggregatePublicKey {
 /// Allows for the adding/combining of multiple BLS Signatures.
 ///
 /// This may be verified against some AggregatePublicKey.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AggregateSignature {
     pub point: G1Point
 }
