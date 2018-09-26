@@ -50,7 +50,6 @@ impl AggregatePublicKey {
     /// Add a PublicKey to the AggregatePublicKey.
     pub fn add(&mut self, public_key: &PublicKey) {
         self.point.add(&public_key.point);
-        self.point.affine();
     }
 
     /// Instantiate an AggregatePublicKey from some serialized bytes.
@@ -101,7 +100,6 @@ impl AggregateSignature {
     /// Add a Signature to the AggregateSignature.
     pub fn add(&mut self, signature: &Signature) {
         self.point.add(&signature.point);
-        self.point.affine();
     }
 
     /// Verify this AggregateSignature against an AggregatePublicKey.
@@ -114,9 +112,13 @@ impl AggregateSignature {
         if self.point.is_infinity() {
             return false;
         }
+        let mut sig_point = self.point.clone();
+        let mut key_point = avk.point.clone();
+        sig_point.affine();
+        key_point.affine();
         let msg_hash_point = hash_on_g1(msg);
-        let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
-        let mut rhs = ate_pairing(&avk.point.as_raw(), &msg_hash_point);
+        let mut lhs = ate_pairing(&GeneratorG2, sig_point.as_raw());
+        let mut rhs = ate_pairing(&key_point.as_raw(), &msg_hash_point);
         lhs.equals(&mut rhs)
     }
 
