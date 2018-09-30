@@ -6,10 +6,11 @@ use rand::rngs::EntropyRng;
 
 use self::amcl::rand::{RAND};
 use self::amcl::arch::Chunk;
-use super::constants::MODBYTES;
-use super::types::BigNum;
+use super::constants::{MODBYTES, GroupG_Size};
+use super::types::{BigNum, GroupG};
 use super::super::utils::get_seeded_RNG;
 use super::amcl::hash256::HASH256;
+use musig::errors::SerzDeserzError;
 
 
 pub fn random_big_number(order: &[Chunk], rng: Option<EntropyRng>) -> BigNum {
@@ -35,4 +36,33 @@ pub fn hash_as_BigNum(msg: &[u8]) -> BigNum {
         for i in digest_len..MODBYTES {h[i] = 0;}
     }
     BigNum::frombytes(&h)
+}
+
+pub fn get_bytes_for_BigNum(n: &BigNum) -> Vec<u8> {
+    let mut temp = BigNum::new_copy(&n);
+    let mut bytes: [u8; MODBYTES] = [0; MODBYTES];
+    temp.tobytes(&mut bytes);
+    bytes.to_vec()
+}
+
+pub fn get_BigNum_from_bytes(bytes: &[u8]) -> Result<BigNum, SerzDeserzError> {
+    if bytes.len() != MODBYTES {
+        return Err(SerzDeserzError::BigNumBytesIncorrectSize(bytes.len(), MODBYTES))
+    }
+    Ok(BigNum::frombytes(bytes))
+}
+
+pub fn get_bytes_for_GroupG_point(point: &GroupG) -> Vec<u8> {
+    let mut temp = GroupG::new();
+    temp.copy(point);
+    let mut bytes: [u8; GroupG_Size] = [0; GroupG_Size];
+    temp.tobytes(&mut bytes, false);
+    bytes.to_vec()
+}
+
+pub fn get_GroupG_point_from_bytes(bytes: &[u8]) -> Result<GroupG, SerzDeserzError> {
+    if bytes.len() != GroupG_Size {
+        return Err(SerzDeserzError::GroupG2BytesIncorrectSize(bytes.len(), GroupG_Size))
+    }
+    Ok(GroupG::frombytes(bytes))
 }

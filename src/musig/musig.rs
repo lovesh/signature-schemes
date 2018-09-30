@@ -5,6 +5,9 @@ use rand::rngs::EntropyRng;
 use super::amcl_utils::{random_big_number, hash_as_BigNum};
 use super::types::{BigNum, GroupG};
 use super::constants::{CURVE_ORDER, GeneratorG, GroupG_Size, MODBYTES, CurveOrder};
+use musig::errors::SerzDeserzError;
+use musig::amcl_utils::{get_bytes_for_BigNum, get_BigNum_from_bytes};
+use musig::amcl_utils::{get_GroupG_point_from_bytes, get_bytes_for_GroupG_point};
 
 pub struct SigKey {
     pub x: BigNum
@@ -15,6 +18,16 @@ impl SigKey {
         SigKey {
             x: random_big_number(&CURVE_ORDER, rng),
         }
+    }
+
+    pub fn from_bytes(sk_bytes: &[u8]) -> Result<SigKey, SerzDeserzError> {
+        Ok(SigKey {
+            x: get_BigNum_from_bytes(sk_bytes)?
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        get_bytes_for_BigNum(&self.x)
     }
 }
 
@@ -39,11 +52,14 @@ impl VerKey {
         }
     }
 
+    pub fn from_bytes(vk_bytes: &[u8]) -> Result<VerKey, SerzDeserzError> {
+        Ok(VerKey {
+            point: get_GroupG_point_from_bytes(vk_bytes)?
+        })
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut vk_clone = self.clone();
-        let mut vk_bytes: [u8; GroupG_Size] = [0; GroupG_Size];
-        vk_clone.point.tobytes(&mut vk_bytes, false);
-        vk_bytes.to_vec()
+        get_bytes_for_GroupG_point(&self.point)
     }
 }
 
@@ -97,11 +113,15 @@ impl Nonce {
         }
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> Result<Nonce, SerzDeserzError> {
+        Ok(Nonce {
+            x: None,
+            point: get_GroupG_point_from_bytes(bytes)?
+        })
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut clone = self.clone();
-        let mut nonce_bytes: [u8; GroupG_Size] = [0; GroupG_Size];
-        clone.point.tobytes(&mut nonce_bytes, false);
-        nonce_bytes.to_vec()
+        get_bytes_for_GroupG_point(&self.point)
     }
 }
 
@@ -160,11 +180,14 @@ impl AggregatedVerKey {
         }
     }
 
+    pub fn from_bytes(vk_bytes: &[u8]) -> Result<AggregatedVerKey, SerzDeserzError> {
+        Ok(AggregatedVerKey {
+            point: get_GroupG_point_from_bytes(vk_bytes)?
+        })
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut vk_clone = self.clone();
-        let mut vk_bytes: [u8; GroupG_Size] = [0; GroupG_Size];
-        vk_clone.point.tobytes(&mut vk_bytes, false);
-        vk_bytes.to_vec()
+        get_bytes_for_GroupG_point(&self.point)
     }
 }
 
@@ -204,6 +227,16 @@ impl Signature {
         challenge_bytes.extend(msg);
         hash_as_BigNum(&challenge_bytes)
     }
+
+    /*pub fn from_bytes(sig_bytes: &[u8]) -> Result<Signature, SerzDeserzError> {
+        Ok(Signature {
+            x: get_BigNum_from_bytes(sig_bytes)?
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        get_bytes_for_BigNum(&self.x)
+    }*/
 }
 
 
@@ -238,11 +271,38 @@ impl AggregatedSignature {
         rhs.add(&avk.point.mul(&challenge));
         rhs.equals(&mut lhs)
     }
+
+    /*pub fn from_bytes(asig_bytes: &[u8]) -> Result<AggregatedSignature, SerzDeserzError> {
+        Ok(AggregatedSignature {
+            x: get_BigNum_from_bytes(asig_bytes)?
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        get_bytes_for_BigNum(&self.x)
+    }*/
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gen_verkey() {
+        let mut sk = SigKey::new(None);
+        let mut vk1 = VerKey::from_sigkey(&sk);
+        let mut vk2 = VerKey::from_sigkey(&sk);
+        assert_eq!(&vk1.point.tostring(), &vk2.point.tostring());
+
+        let bs = vk1.to_bytes();
+        let mut vk11 = VerKey::from_bytes(&bs).unwrap();
+        assert_eq!(&vk1.point.tostring(), &vk11.point.tostring());
+
+        let bs = sk.to_bytes();
+        let mut sk1 = SigKey::from_bytes(&bs).unwrap();
+        assert_eq!(&sk1.x.tostring(), &sk.x.tostring());
+    }
+
 
     #[test]
     fn aggr_sign_verify() {
@@ -263,11 +323,30 @@ mod tests {
             let msg_b = msg.as_bytes();
             for i in 0..5 {
                 let keypair = &keypairs[i];
-                signatures.push(Signature::new(msg_b, &keypair.sig_key, &nonces[i].x.unwrap(), &keypair.ver_key, &nonces, &verkeys));
+                let sig = Signature::new(msg_b, &keypair.sig_key, &nonces[i].x.unwrap(), &keypair.ver_key, &nonces, &verkeys);
+                signatures.push(sig);
             }
             let aggr_sig: AggregatedSignature = AggregatedSignature::new(&signatures);
             assert!(aggr_sig.verify(msg_b, &nonces, &verkeys));
-            let aggr_nonce = Nonce::aggregate(&nonces);
+
+            let R = Nonce::aggregate(&nonces);
+            let verkeys = keypairs.iter().map(|k| k.ver_key.clone()).collect();
+            let L = HashedVerKeys::new(&verkeys);
+            let mut avk = AggregatedVerKey::new(&verkeys);
+
+            let mut signatures: Vec<Signature> = vec![];
+            for i in 0..5 {
+                let keypair = &keypairs[i];
+                let sig = Signature::new_using_aggregated_objs(msg_b, &keypair.sig_key, &nonces[i].x.unwrap(), &keypair.ver_key, &R, &L, &avk);
+                signatures.push(sig);
+            }
+            let aggr_sig: AggregatedSignature = AggregatedSignature::new(&signatures);
+            assert!(aggr_sig.verify_using_aggregated_objs(msg_b, &R, &avk));
+
+            let bs = avk.to_bytes();
+            let mut avk_from_bytes = AggregatedVerKey::from_bytes(&bs).unwrap();
+            assert_eq!(&avk.point.tostring(), &avk_from_bytes.point.tostring());
+            assert!(aggr_sig.verify_using_aggregated_objs(msg_b, &R, &avk_from_bytes));
         }
     }
 }
