@@ -12,7 +12,7 @@ use bls::amcl_utils::get_G1_point_from_bytes;
 use bls::amcl_utils::get_bytes_for_G1_point;
 
 
-// This is a newer but slower way of doing BLS signature aggregation. This is not vulnerable to
+// This is a newer but SLOWER way of doing BLS signature aggregation. This is NOT VULNERABLE to
 // rogue public key attack so does not need proof of possession.
 
 pub struct AggregatedVerKey {

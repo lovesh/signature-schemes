@@ -12,8 +12,8 @@ extern crate rand;
 
 pub mod common;
 pub mod simple;
-pub mod aggr_new;
-pub mod aggr_old;
+pub mod aggr_slow;
+pub mod aggr_fast;
 pub mod types;
 pub mod constants;
 pub mod errors;

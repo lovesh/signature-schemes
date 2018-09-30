@@ -72,7 +72,7 @@ let b = m.as_bytes();
 let sig1 = Signature::new(&b, &keypair1.sig_key);
 let sig2 = Signature::new(&b, &keypair2.sig_key);
 let sigs: Vec<&Signature> = vec![&sig1, &sig2]
-let asig = AggregatedSignatureOld::new(sigs);
+let asig = AggregatedSignatureFast::new(sigs);
 ```
 
 #### Aggregate Signature Verification
@@ -81,7 +81,7 @@ let vks = vec![&keypair1.vk, &keypair2.vk]
 asig.verify(&b, vks)
         OR
 let vks = vec![&keypair1.vk, &keypair2.vk]
-let avk = AggregatedVerKeyOld::new(vks);
+let avk = AggregatedVerKeyFast::new(vks);
 assert!(asig.verify_using_aggr_vk(&b, &avk));
 ```
 
@@ -98,5 +98,5 @@ let vk_bytes = vk.tobytes();
 let sig = Signature::from_bytes(&bs).unwrap();
 let sig_bytes = sig.tobytes();
 
-Similar for other objects like AggregatedVerKey, AggregatedSignature, AggregatedVerKeyOld, AggregatedSignatureOld  
+Similar for other objects like AggregatedVerKey, AggregatedSignature, AggregatedVerKeyFast, AggregatedSignatureFast  
 ```
