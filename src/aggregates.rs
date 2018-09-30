@@ -257,12 +257,17 @@ mod tests {
             /*
              * The full set of signed keys aggregated in non-sequential
              * order should pass verification.
+             *
+             * Note: "shuffled" is used loosely here: we split the vec of keys in half, put
+             * the last half in front of the first half and then swap the first and last elements.
              */
             let mut shuffled_signing_agg_pub = AggregatePublicKey::new();
             let n = signing_kps.len();
+            assert!(n > 2, "test error: shuffle is ineffective with less than two elements");
             let mut order: Vec<usize> = ((n/2)..n).collect();
             order.append(&mut (0..(n/2)).collect());
-            for i in 0..signing_kps.len() {
+            order.swap(0, n - 1);
+            for i in order {
                 let keypair = signing_kps[i].clone();
                 shuffled_signing_agg_pub.add(&keypair.pk);
             }
