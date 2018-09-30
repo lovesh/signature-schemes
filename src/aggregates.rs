@@ -249,8 +249,7 @@ mod tests {
              */
             let mut rev_signing_agg_pub = AggregatePublicKey::new();
             for i in (0..signing_kps.len()).rev() {
-                let keypair = signing_kps[i].clone();
-                rev_signing_agg_pub.add(&keypair.pk);
+                rev_signing_agg_pub.add(&signing_kps[i].pk);
             }
             assert!(agg_signature.verify(&message, &rev_signing_agg_pub));
 
@@ -268,8 +267,7 @@ mod tests {
             order.append(&mut (0..(n/2)).collect());
             order.swap(0, n - 1);
             for i in order {
-                let keypair = signing_kps[i].clone();
-                shuffled_signing_agg_pub.add(&keypair.pk);
+                shuffled_signing_agg_pub.add(&signing_kps[i].pk);
             }
             assert!(agg_signature.verify(&message, &shuffled_signing_agg_pub));
 
