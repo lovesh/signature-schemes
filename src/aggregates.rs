@@ -314,6 +314,13 @@ mod tests {
             let non_signing_agg_key = AggregatePublicKey::
                 from_public_keys(&non_signing_pub_keys);
             assert!(!agg_signature.verify(&message, &non_signing_agg_key));
+
+            /*
+             * An empty aggregate pub key (it has not had any keys added to it) should
+             * fail.
+             */
+            let empty_agg_pub = AggregatePublicKey::new();
+            assert!(!agg_signature.verify(&message, &empty_agg_pub));
         }
     }
 
