@@ -283,6 +283,24 @@ mod tests {
             assert!(!double_sig_agg_sig.verify(&message, &signing_agg_pub));
 
             /*
+             * The full set of signed keys should fail verification if one key signs across a
+             * different message.
+             */
+            let mut distinct_msg_agg_sig = AggregateSignature::new();
+            let mut distinct_msg_agg_pub = AggregatePublicKey::new();
+            for (i, kp) in signing_kps.iter().enumerate() {
+                let message = match i {
+                    0 => "different_msg!1".as_bytes(),
+                    _ => message
+                };
+                let sig = Signature::new(&message, &kp.sk);
+                distinct_msg_agg_sig.add(&sig);
+                distinct_msg_agg_pub.add(&kp.pk);
+
+            }
+            assert!(!distinct_msg_agg_sig.verify(&message, &distinct_msg_agg_pub));
+
+            /*
              * The signature should fail if an extra, non-signing key has signed the
              * aggregate signature.
              */
