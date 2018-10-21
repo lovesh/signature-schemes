@@ -33,8 +33,12 @@ lazy_static! {
 }
 
 pub fn hash_on_g1(msg: &[u8]) -> GroupG1 {
-    let result = blake2b(64, &[], &msg);
-    GroupG1::mapit(&result.as_bytes()[0..MODBYTES])
+    let result = blake2b(49, &[], &msg);
+    GroupG1::mapit(&result.as_bytes())
+}
+
+pub fn map_to_g1(val: &[u8]) -> GroupG1 {
+    GroupG1::mapit(val)
 }
 
 pub fn ate_pairing(point_g2: &GroupG2, point_g1: &GroupG1) -> FP12 {

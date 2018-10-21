@@ -2,6 +2,7 @@ extern crate amcl;
 
 use super::amcl_utils::{
     hash_on_g1,
+    map_to_g1,
     ate_pairing,
     GeneratorG2,
 };
@@ -27,6 +28,16 @@ impl Signature {
         }
     }
 
+    /// Instantiate a new Signature from a message and a SecretKey, where the message has already
+    /// been hashed.
+    pub fn new_hashed(msg_hashed: &[u8], sk: &SecretKey) -> Self {
+        let hash_point = map_to_g1(msg_hashed);
+        let sig = hash_point.mul(&sk.x);
+        Self {
+            point: G1Point::from_raw(sig)
+        }
+    }
+
     /// Verify the Signature against a PublicKey.
     ///
     /// In theory, should only return true if the PublicKey matches the SecretKey used to
@@ -38,6 +49,24 @@ impl Signature {
             return false;
         }
         let msg_hash_point = hash_on_g1(msg);
+        let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
+        let mut rhs = ate_pairing(&pk.point.as_raw(), &msg_hash_point);
+        lhs.equals(&mut rhs)
+    }
+
+    /// Verify the Signature against a PublicKey, where the message has already been hashed.
+    ///
+    /// The supplied hash will be mapped to G1.
+    ///
+    /// In theory, should only return true if the PublicKey matches the SecretKey used to
+    /// instantiate the Signature.
+    pub fn verify_hashed(&self, msg_hash: &[u8], pk: &PublicKey) -> bool {
+        // TODO: Check if point exists on curve, maybe use `ECP::new_big`
+        // and x cord of verkey
+        if self.point.is_infinity() {
+            return false;
+        }
+        let msg_hash_point = map_to_g1(msg_hash);
         let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
         let mut rhs = ate_pairing(&pk.point.as_raw(), &msg_hash_point);
         lhs.equals(&mut rhs)
