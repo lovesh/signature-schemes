@@ -89,7 +89,7 @@ impl HASH384 {
 
 	fn transform(&mut self) { /* basic transformation step */
 		for j in 16..80 {
-			self.w[j]=HASH384::theta1(self.w[j-2])+self.w[j-7]+HASH384::theta0(self.w[j-15])+self.w[j-16];
+			self.w[j] = HASH384::theta1(self.w[j-2]).wrapping_add(self.w[j-7]).wrapping_add(HASH384::theta0(self.w[j-15])).wrapping_add(self.w[j-16]);
 		}
 		let mut a=self.h[0]; let mut b=self.h[1]; let mut c=self.h[2]; let mut d=self.h[3]; 
 		let mut e=self.h[4]; let mut f=self.h[5]; let mut g=self.h[6]; let mut hh=self.h[7];

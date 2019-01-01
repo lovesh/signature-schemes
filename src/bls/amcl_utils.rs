@@ -6,7 +6,7 @@ use rand::rngs::EntropyRng;
 
 use self::amcl::rand::{RAND};
 use self::amcl::arch::Chunk;
-use BLSCurve::mpin::{SHA256, hash_id};
+use BLSCurve::mpin::{SHA384, hash_id};
 use BLSCurve::pair::{ate, fexp};
 use super::types::{BigNum, GroupG1, GroupG2, FP12};
 use super::super::utils::get_seeded_RNG;
@@ -23,19 +23,19 @@ pub fn random_big_number(order: &[Chunk], rng: Option<EntropyRng>) -> BigNum {
 
 pub fn hash_on_GroupG1(msg: &[u8]) -> GroupG1 {
     let mut h: [u8; MODBYTES] = [0; MODBYTES];
-    hash_id(SHA256, msg, &mut h);
+    hash_id(SHA384, msg, &mut h);
     GroupG1::mapit(&h)
 }
 
 pub fn hash_on_GroupG2(msg: &[u8]) -> GroupG2 {
     let mut h: [u8; MODBYTES] = [0; MODBYTES];
-    hash_id(SHA256, msg, &mut h);
+    hash_id(SHA384, msg, &mut h);
     GroupG2::mapit(&h)
 }
 
 pub fn hash_as_BigNum(msg: &[u8]) -> BigNum {
     let mut h: [u8; MODBYTES] = [0; MODBYTES];
-    hash_id(SHA256, msg, &mut h);
+    hash_id(SHA384, msg, &mut h);
     BigNum::frombytes(&h)
 }
 

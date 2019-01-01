@@ -2,7 +2,7 @@ extern crate amcl;
 extern crate rand;
 
 use rand::rngs::EntropyRng;
-use super::amcl_utils::{random_big_number, hash_on_GroupG1, ate_pairing, hash_as_BigNum,
+use super::amcl_utils::{random_big_number, hash_on_GroupG1, ate_pairing,
                         get_bytes_for_BigNum, get_bytes_for_G2_point, get_G2_point_from_bytes};
 use super::types::{BigNum, GroupG1, GroupG2};
 use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE, MODBYTES};
