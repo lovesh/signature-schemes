@@ -1,22 +1,16 @@
 extern crate amcl;
 extern crate rand;
 
-use super::amcl_utils::{
-    BigNum,
-    CURVE_ORDER,
-    GeneratorG2,
-    MODBYTES,
-    MOD_BYTE_SIZE,
-};
+use super::amcl_utils::{BigNum, GeneratorG2, CURVE_ORDER, MODBYTES, MOD_BYTE_SIZE};
+use super::errors::DecodeError;
 use super::g2::G2Point;
 use super::rng::get_seeded_rng;
-use super::errors::DecodeError;
 use std::fmt;
 
 #[derive(Clone)]
 /// A BLS secret key.
 pub struct SecretKey {
-    pub x: BigNum
+    pub x: BigNum,
 }
 
 impl SecretKey {
@@ -24,20 +18,16 @@ impl SecretKey {
     pub fn random() -> Self {
         let mut r = get_seeded_rng(256);
         let x = BigNum::randomnum(&BigNum::new_ints(&CURVE_ORDER), &mut r);
-        SecretKey {
-            x
-        }
+        SecretKey { x }
     }
 
     /// Instantiate a SecretKey from existing bytes.
-    pub fn from_bytes(bytes: &[u8])
-        -> Result<SecretKey, DecodeError>
-    {
+    pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey, DecodeError> {
         if bytes.len() != MOD_BYTE_SIZE {
-            return Err(DecodeError::IncorrectSize)
+            return Err(DecodeError::IncorrectSize);
         }
         Ok(SecretKey {
-            x: BigNum::frombytes(bytes)
+            x: BigNum::frombytes(bytes),
         })
     }
 
@@ -64,10 +54,12 @@ impl PartialEq for SecretKey {
     }
 }
 
+impl Eq for SecretKey {}
+
 /// A BLS public key.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKey {
-    pub point: G2Point
+    pub point: G2Point,
 }
 
 impl PublicKey {
@@ -79,11 +71,9 @@ impl PublicKey {
     }
 
     /// Instantiate a PublicKey from some bytes.
-    pub fn from_bytes(bytes: &[u8])
-        -> Result<PublicKey, DecodeError>
-    {
+    pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, DecodeError> {
         let point = G2Point::from_bytes(bytes)?;
-        Ok(Self{ point })
+        Ok(Self { point })
     }
 
     /// Export the PublicKey to some bytes.
@@ -93,10 +83,10 @@ impl PublicKey {
 }
 
 /// A helper which stores a BLS public and private key pair.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Keypair {
     pub sk: SecretKey,
-    pub pk: PublicKey
+    pub pk: PublicKey,
 }
 
 impl Keypair {
@@ -104,26 +94,21 @@ impl Keypair {
     pub fn random() -> Self {
         let sk = SecretKey::random();
         let pk = PublicKey::from_secret_key(&sk);
-        Keypair {
-            sk,
-            pk
-        }
+        Keypair { sk, pk }
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::signature::Signature;
+    use super::*;
 
     #[test]
     fn test_secret_key_serialization_isomorphism() {
         let sk_bytes = vec![
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            78, 252, 122, 126, 32, 0, 75, 89, 252, 31, 42,
-            130, 254, 88, 6, 90, 138, 202, 135, 194, 233,
-            117, 181, 75, 96, 238, 79, 100, 237, 59, 140, 111
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 78, 252, 122, 126, 32, 0, 75, 89, 252,
+            31, 42, 130, 254, 88, 6, 90, 138, 202, 135, 194, 233, 117, 181, 75, 96, 238, 79, 100,
+            237, 59, 140, 111,
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
         let decoded_sk = sk.as_bytes();
@@ -133,10 +118,9 @@ mod tests {
     #[test]
     fn test_public_key_serialization_isomorphism() {
         let sk_bytes = vec![
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            78, 252, 122, 126, 32, 0, 75, 89, 252, 31, 42,
-            130, 254, 88, 6, 90, 138, 202, 135, 194, 233,
-            117, 181, 75, 96, 238, 79, 100, 237, 59, 140, 111
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 78, 252, 122, 126, 32, 0, 75, 89, 252,
+            31, 42, 130, 254, 88, 6, 90, 138, 202, 135, 194, 233, 117, 181, 75, 96, 238, 79, 100,
+            237, 59, 140, 111,
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
         let pk = PublicKey::from_secret_key(&sk);
@@ -149,10 +133,9 @@ mod tests {
     #[test]
     fn test_signature_verify_with_serialized_public_key() {
         let sk_bytes = vec![
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            78, 252, 122, 126, 32, 0, 75, 89, 252, 31, 42,
-            130, 254, 88, 6, 90, 138, 202, 135, 194, 233,
-            117, 181, 75, 96, 238, 79, 100, 237, 59, 140, 111
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 78, 252, 122, 126, 32, 0, 75, 89, 252,
+            31, 42, 130, 254, 88, 6, 90, 138, 202, 135, 194, 233, 117, 181, 75, 96, 238, 79, 100,
+            237, 59, 140, 111,
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
         let pk = PublicKey::from_secret_key(&sk);

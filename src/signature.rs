@@ -1,19 +1,11 @@
 extern crate amcl;
 
-use super::amcl_utils::{
-    hash_on_g1,
-    map_to_g1,
-    ate_pairing,
-    GeneratorG2,
-};
-use super::keys::{
-    SecretKey,
-    PublicKey,
-};
-use super::g1::G1Point;
+use super::amcl_utils::{ate_pairing, hash_on_g1, map_to_g1, GeneratorG2};
 use super::errors::DecodeError;
+use super::g1::G1Point;
+use super::keys::{PublicKey, SecretKey};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signature {
     pub point: G1Point,
 }
@@ -24,7 +16,7 @@ impl Signature {
         let hash_point = hash_on_g1(msg);
         let sig = hash_point.mul(&sk.x);
         Self {
-            point: G1Point::from_raw(sig)
+            point: G1Point::from_raw(sig),
         }
     }
 
@@ -34,7 +26,7 @@ impl Signature {
         let hash_point = map_to_g1(msg_hashed);
         let sig = hash_point.mul(&sk.x);
         Self {
-            point: G1Point::from_raw(sig)
+            point: G1Point::from_raw(sig),
         }
     }
 
@@ -73,11 +65,9 @@ impl Signature {
     }
 
     /// Instantiate a Signature from a serialized Signature.
-    pub fn from_bytes(bytes: &[u8])
-        -> Result<Signature, DecodeError>
-    {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Signature, DecodeError> {
         let point = G1Point::from_bytes(bytes)?;
-        Ok(Self{ point })
+        Ok(Self { point })
     }
 
     /// Serialize the Signature.
@@ -88,8 +78,8 @@ impl Signature {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::keys::Keypair;
+    use super::*;
 
     #[test]
     fn basic_sign_verify() {
@@ -97,11 +87,7 @@ mod tests {
         let sk = keypair.sk;
         let vk = keypair.pk;
 
-        let messages = vec![
-            "",
-            "a",
-            "an example",
-        ];
+        let messages = vec!["", "a", "an example"];
 
         for m in messages {
             /*

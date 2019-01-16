@@ -1,7 +1,4 @@
-use super::amcl_utils::{
-    GroupG1,
-    G1_BYTE_SIZE,
-};
+use super::amcl_utils::{GroupG1, G1_BYTE_SIZE};
 use super::errors::DecodeError;
 use std::fmt;
 
@@ -11,15 +8,13 @@ pub struct G1Point {
 
 impl G1Point {
     pub fn new() -> Self {
-        Self{
-            point: GroupG1::new()
+        Self {
+            point: GroupG1::new(),
         }
     }
 
     pub fn from_raw(point: GroupG1) -> Self {
-        Self {
-            point
-        }
+        Self { point }
     }
 
     pub fn add(&mut self, point: &G1Point) {
@@ -45,14 +40,12 @@ impl G1Point {
     /// Instatiate the point from some bytes.
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
-    pub fn from_bytes(bytes: &[u8])
-        -> Result<Self, DecodeError>
-    {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         if bytes.len() != G1_BYTE_SIZE {
-            return Err(DecodeError::IncorrectSize)
+            return Err(DecodeError::IncorrectSize);
         }
         Ok(Self {
-            point: GroupG1::frombytes(bytes)
+            point: GroupG1::frombytes(bytes),
         })
     }
 
@@ -61,7 +54,7 @@ impl G1Point {
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn as_bytes(&self) -> Vec<u8> {
         if self.is_infinity() {
-            return vec![0; G1_BYTE_SIZE]
+            return vec![0; G1_BYTE_SIZE];
         };
         let mut temp = GroupG1::new();
         temp.copy(&self.point);
@@ -69,7 +62,6 @@ impl G1Point {
         temp.tobytes(&mut bytes, false);
         bytes.to_vec()
     }
-
 }
 
 impl fmt::Debug for G1Point {
@@ -84,9 +76,7 @@ impl Clone for G1Point {
     fn clone(&self) -> Self {
         let mut temp_s = GroupG1::new();
         temp_s.copy(self.as_raw());
-        Self {
-            point: temp_s
-        }
+        Self { point: temp_s }
     }
 }
 
@@ -96,3 +86,4 @@ impl PartialEq for G1Point {
     }
 }
 
+impl Eq for G1Point {}
