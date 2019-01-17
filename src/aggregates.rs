@@ -1,6 +1,6 @@
 extern crate amcl;
 
-use super::amcl_utils::{ate_pairing, hash_on_g1, GeneratorG2};
+use super::amcl_utils::{ate_pairing, hash_on_g2, GeneratorG1};
 use super::errors::DecodeError;
 use super::g1::G1Point;
 use super::g2::G2Point;
@@ -12,7 +12,7 @@ use super::signature::Signature;
 /// This may be used to verify some AggregateSignature.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AggregatePublicKey {
-    pub point: G2Point,
+    pub point: G1Point,
 }
 
 impl AggregatePublicKey {
@@ -20,7 +20,7 @@ impl AggregatePublicKey {
     ///
     /// The underlying point will be set to infinity.
     pub fn new() -> Self {
-        let mut point = G2Point::new();
+        let mut point = G1Point::new();
         // TODO: check why this inf call
         point.inf();
         Self { point }
@@ -46,7 +46,7 @@ impl AggregatePublicKey {
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregatePublicKey, DecodeError> {
-        let point = G2Point::from_bytes(bytes)?;
+        let point = G1Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
@@ -69,7 +69,7 @@ impl Default for AggregatePublicKey {
 /// This may be verified against some AggregatePublicKey.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AggregateSignature {
-    pub point: G1Point,
+    pub point: G2Point,
 }
 
 impl AggregateSignature {
@@ -77,7 +77,7 @@ impl AggregateSignature {
     ///
     /// The underlying point will be set to infinity.
     pub fn new() -> Self {
-        let mut point = G1Point::new();
+        let mut point = G2Point::new();
         // TODO: check why this inf call
         point.inf();
         Self { point }
@@ -100,9 +100,9 @@ impl AggregateSignature {
         let mut key_point = avk.point.clone();
         sig_point.affine();
         key_point.affine();
-        let msg_hash_point = hash_on_g1(msg);
-        let mut lhs = ate_pairing(&GeneratorG2, sig_point.as_raw());
-        let mut rhs = ate_pairing(&key_point.as_raw(), &msg_hash_point);
+        let msg_hash_point = hash_on_g2(msg);
+        let mut lhs = ate_pairing(sig_point.as_raw(), &GeneratorG1);
+        let mut rhs = ate_pairing(&msg_hash_point, &key_point.as_raw());
         lhs.equals(&mut rhs)
     }
 
@@ -110,7 +110,7 @@ impl AggregateSignature {
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregateSignature, DecodeError> {
-        let point = G1Point::from_bytes(bytes)?;
+        let point = G2Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 

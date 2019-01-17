@@ -1,32 +1,32 @@
 extern crate amcl;
 
-use super::amcl_utils::{ate_pairing, hash_on_g1, map_to_g1, GeneratorG2};
+use super::amcl_utils::{ate_pairing, hash_on_g2, map_to_g2, GeneratorG1};
 use super::errors::DecodeError;
-use super::g1::G1Point;
+use super::g2::G2Point;
 use super::keys::{PublicKey, SecretKey};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signature {
-    pub point: G1Point,
+    pub point: G2Point,
 }
 
 impl Signature {
     /// Instantiate a new Signature from a message and a SecretKey.
     pub fn new(msg: &[u8], sk: &SecretKey) -> Self {
-        let hash_point = hash_on_g1(msg);
+        let hash_point = hash_on_g2(msg);
         let sig = hash_point.mul(&sk.x);
         Self {
-            point: G1Point::from_raw(sig),
+            point: G2Point::from_raw(sig),
         }
     }
 
     /// Instantiate a new Signature from a message and a SecretKey, where the message has already
     /// been hashed.
     pub fn new_hashed(msg_hashed: &[u8], sk: &SecretKey) -> Self {
-        let hash_point = map_to_g1(msg_hashed);
+        let hash_point = map_to_g2(msg_hashed);
         let sig = hash_point.mul(&sk.x);
         Self {
-            point: G1Point::from_raw(sig),
+            point: G2Point::from_raw(sig),
         }
     }
 
@@ -40,9 +40,9 @@ impl Signature {
         if self.point.is_infinity() {
             return false;
         }
-        let msg_hash_point = hash_on_g1(msg);
-        let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
-        let mut rhs = ate_pairing(&pk.point.as_raw(), &msg_hash_point);
+        let msg_hash_point = hash_on_g2(msg);
+        let mut lhs = ate_pairing(self.point.as_raw(), &GeneratorG1);
+        let mut rhs = ate_pairing(&msg_hash_point, &pk.point.as_raw());
         lhs.equals(&mut rhs)
     }
 
@@ -58,15 +58,15 @@ impl Signature {
         if self.point.is_infinity() {
             return false;
         }
-        let msg_hash_point = map_to_g1(msg_hash);
-        let mut lhs = ate_pairing(&GeneratorG2, self.point.as_raw());
-        let mut rhs = ate_pairing(&pk.point.as_raw(), &msg_hash_point);
+        let msg_hash_point = map_to_g2(msg_hash);
+        let mut lhs = ate_pairing(self.point.as_raw(), &GeneratorG1);
+        let mut rhs = ate_pairing(&msg_hash_point, &pk.point.as_raw());
         lhs.equals(&mut rhs)
     }
 
     /// Instantiate a Signature from a serialized Signature.
     pub fn from_bytes(bytes: &[u8]) -> Result<Signature, DecodeError> {
-        let point = G1Point::from_bytes(bytes)?;
+        let point = G2Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
