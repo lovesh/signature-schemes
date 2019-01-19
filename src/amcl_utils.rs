@@ -32,8 +32,8 @@ lazy_static! {
     pub static ref GeneratorG2: GroupG2 = GroupG2::generator();
 }
 
-pub fn hash_on_g1(msg: &[u8]) -> GroupG1 {
-    let result = blake2b(49, &[], &msg);
+pub fn hash_on_g1(msg: &[u8], d: u64) -> GroupG1 {
+    let result = blake2b(49, &[], &[msg, &d.to_be_bytes()].concat());
     GroupG1::mapit(&result.as_bytes())
 }
 

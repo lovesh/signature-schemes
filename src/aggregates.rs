@@ -92,7 +92,7 @@ impl AggregateSignature {
     ///
     /// All PublicKeys which signed across this AggregateSignature must be included in the
     /// AggregatePublicKey, otherwise verification will fail.
-    pub fn verify(&self, msg: &[u8], avk: &AggregatePublicKey) -> bool {
+    pub fn verify(&self, msg: &[u8], d: u64, avk: &AggregatePublicKey) -> bool {
         if self.point.is_infinity() {
             return false;
         }
@@ -100,7 +100,7 @@ impl AggregateSignature {
         let mut key_point = avk.point.clone();
         sig_point.affine();
         key_point.affine();
-        let msg_hash_point = hash_on_g1(msg);
+        let msg_hash_point = hash_on_g1(msg, d);
         let mut lhs = ate_pairing(&GeneratorG2, sig_point.as_raw());
         let mut rhs = ate_pairing(&key_point.as_raw(), &msg_hash_point);
         lhs.equals(&mut rhs)
