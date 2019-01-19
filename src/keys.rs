@@ -139,23 +139,25 @@ mod tests {
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
         let pk = PublicKey::from_secret_key(&sk);
+        let domain = 42;
 
         let message = "cats".as_bytes();
-        let signature = Signature::new(&message, &sk);
-        assert!(signature.verify(&message, &pk));
+        let signature = Signature::new(&message, domain, &sk);
+        assert!(signature.verify(&message, domain, &pk));
 
         let pk_bytes = pk.as_bytes();
         let pk = PublicKey::from_bytes(&pk_bytes).unwrap();
-        assert!(signature.verify(&message, &pk));
+        assert!(signature.verify(&message, domain, &pk));
     }
 
     #[test]
     fn test_random_secret_key_can_sign() {
         let sk = SecretKey::random();
         let pk = PublicKey::from_secret_key(&sk);
+        let domain = 42;
 
         let message = "cats".as_bytes();
-        let signature = Signature::new(&message, &sk);
-        assert!(signature.verify(&message, &pk));
+        let signature = Signature::new(&message, domain, &sk);
+        assert!(signature.verify(&message, domain, &pk));
     }
 }

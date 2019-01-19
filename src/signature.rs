@@ -88,14 +88,15 @@ mod tests {
         let vk = keypair.pk;
 
         let messages = vec!["", "a", "an example"];
+        let domain = 42;
 
         for m in messages {
             /*
              * Simple sign and verify
              */
             let bytes = m.as_bytes();
-            let mut sig = Signature::new(&bytes, &sk);
-            assert!(sig.verify(&bytes, &vk));
+            let mut sig = Signature::new(&bytes, domain, &sk);
+            assert!(sig.verify(&bytes, domain, &vk));
 
             /*
              * Test serializing, then deserializing the signature
@@ -103,7 +104,7 @@ mod tests {
             let sig_bytes = sig.as_bytes();
             let mut new_sig = Signature::from_bytes(&sig_bytes).unwrap();
             assert_eq!(&sig.as_bytes(), &new_sig.as_bytes());
-            assert!(new_sig.verify(&bytes, &vk));
+            assert!(new_sig.verify(&bytes, domain, &vk));
         }
     }
 
@@ -112,12 +113,13 @@ mod tests {
         let keypair = Keypair::random();
         let sk = keypair.sk;
         let vk = keypair.pk;
+        let domain = 42;
 
         let mut msg = "Some msg";
-        let sig = Signature::new(&msg.as_bytes(), &sk);
+        let sig = Signature::new(&msg.as_bytes(), domain, &sk);
         msg = "Other msg";
-        assert_eq!(sig.verify(&msg.as_bytes(), &vk), false);
+        assert_eq!(sig.verify(&msg.as_bytes(), domain, &vk), false);
         msg = "";
-        assert_eq!(sig.verify(&msg.as_bytes(), &vk), false);
+        assert_eq!(sig.verify(&msg.as_bytes(), domain, &vk), false);
     }
 }
