@@ -52,7 +52,12 @@ impl Signature {
     ///
     /// In theory, should only return true if the PublicKey matches the SecretKey used to
     /// instantiate the Signature.
-    pub fn verify_hashed(&self, msg_hash_real: &[u8], msg_hash_imaginary: &[u8], pk: &PublicKey) -> bool {
+    pub fn verify_hashed(
+        &self,
+        msg_hash_real: &[u8],
+        msg_hash_imaginary: &[u8],
+        pk: &PublicKey,
+    ) -> bool {
         // TODO: Check if point exists on curve, maybe use `ECP::new_big`
         // and x cord of verkey
         if self.point.is_infinity() {
