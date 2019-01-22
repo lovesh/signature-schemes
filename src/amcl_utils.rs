@@ -32,13 +32,13 @@ lazy_static! {
     pub static ref GeneratorG2: GroupG2 = GroupG2::generator();
 }
 
-pub fn hash_on_g1(msg: &[u8], d: u64) -> GroupG1 {
+pub fn hash_on_g2(msg: &[u8], d: u64) -> GroupG2 {
     let result = blake2b(49, &[], &[msg, &d.to_be_bytes()].concat());
-    GroupG1::mapit(&result.as_bytes())
+    GroupG2::mapit(&result.as_bytes())
 }
 
-pub fn map_to_g1(val: &[u8]) -> GroupG1 {
-    GroupG1::mapit(val)
+pub fn map_to_g2(val: &[u8]) -> GroupG2 {
+    GroupG2::mapit(val)
 }
 
 pub fn ate_pairing(point_g2: &GroupG2, point_g1: &GroupG1) -> FP12 {
