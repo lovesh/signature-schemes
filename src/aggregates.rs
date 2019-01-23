@@ -78,7 +78,6 @@ impl AggregateSignature {
     /// The underlying point will be set to infinity.
     pub fn new() -> Self {
         let mut point = G2Point::new();
-        // TODO: check why this inf call
         point.inf();
         Self { point }
     }
@@ -93,7 +92,8 @@ impl AggregateSignature {
     /// All PublicKeys which signed across this AggregateSignature must be included in the
     /// AggregatePublicKey, otherwise verification will fail.
     pub fn verify(&self, msg: &[u8], d: u64, avk: &AggregatePublicKey) -> bool {
-        if self.point.is_infinity() {
+        // Check points are valid
+        if self.point.is_infinity() || avk.point.is_infinity() {
             return false;
         }
         let mut sig_point = self.point.clone();
@@ -111,6 +111,7 @@ impl AggregateSignature {
     ///  All PublicKeys related to a Message should be aggregated into one AggregatePublicKey.
     ///  Each AggregatePublicKey has a 1:1 ratio with a 32 byte Message.
     pub fn verify_multiple(&self, msg: &[u8], d: u64, avks: &[AggregatePublicKey]) -> bool {
+        // Check AggregateSignature point is valid
         if self.point.is_infinity() {
             return false;
         }
@@ -125,6 +126,11 @@ impl AggregateSignature {
         // Aggregate each AggregatePublicKey with a Message
         let mut lhs = FP12::new();
         for (i, key) in avks.iter().enumerate() {
+            // Check point is valid
+            if key.point.is_infinity() {
+                return false;
+            }
+
             let mut key_point = key.point.clone();
             key_point.affine();
             let pair = ate_pairing(

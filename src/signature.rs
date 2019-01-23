@@ -35,11 +35,11 @@ impl Signature {
     /// In theory, should only return true if the PublicKey matches the SecretKey used to
     /// instantiate the Signature.
     pub fn verify(&self, msg: &[u8], d: u64, pk: &PublicKey) -> bool {
-        // TODO: Check if point exists on curve, maybe use `ECP::new_big`
-        // and x cord of verkey
-        if self.point.is_infinity() {
+        // Check points are valid
+        if self.point.is_infinity() || pk.point.is_infinity() {
             return false;
         }
+
         let msg_hash_point = hash_on_g2(msg, d);
         let mut lhs = ate_pairing(self.point.as_raw(), &GeneratorG1);
         let mut rhs = ate_pairing(&msg_hash_point, &pk.point.as_raw());
@@ -58,11 +58,11 @@ impl Signature {
         msg_hash_imaginary: &[u8],
         pk: &PublicKey,
     ) -> bool {
-        // TODO: Check if point exists on curve, maybe use `ECP::new_big`
-        // and x cord of verkey
-        if self.point.is_infinity() {
+        // Check points are valid
+        if self.point.is_infinity() || pk.point.is_infinity() {
             return false;
         }
+
         let msg_hash_point = map_to_g2(msg_hash_real, msg_hash_imaginary);
         let mut lhs = ate_pairing(self.point.as_raw(), &GeneratorG1);
         let mut rhs = ate_pairing(&msg_hash_point, &pk.point.as_raw());
