@@ -114,17 +114,30 @@ mod tests {
     }
 
     #[test]
-    fn verification_failure() {
+    fn verification_failure_message() {
         let keypair = Keypair::random();
         let sk = keypair.sk;
         let vk = keypair.pk;
-        let domain = 42;
 
         let mut msg = "Some msg";
+        let domain = 42;
         let sig = Signature::new(&msg.as_bytes(), domain, &sk);
         msg = "Other msg";
         assert_eq!(sig.verify(&msg.as_bytes(), domain, &vk), false);
         msg = "";
+        assert_eq!(sig.verify(&msg.as_bytes(), domain, &vk), false);
+    }
+
+    #[test]
+    fn verification_failure_domain() {
+        let keypair = Keypair::random();
+        let sk = keypair.sk;
+        let vk = keypair.pk;
+
+        let msg = "Some msg";
+        let mut domain = 42;
+        let sig = Signature::new(&msg.as_bytes(), domain, &sk);
+        domain = 11;
         assert_eq!(sig.verify(&msg.as_bytes(), domain, &vk), false);
     }
 }
