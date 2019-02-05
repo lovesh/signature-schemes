@@ -1,6 +1,6 @@
 [package]
 name = "bls-aggregates"
-version = "0.2.0"
+version = "0.4.1"
 authors = ["Lovesh Harchandani <lovesh.bond@gmail.com>"]
 description = "Various signature schemes. BLS, MuSig"
 license = "MIT/Apache-2.0"

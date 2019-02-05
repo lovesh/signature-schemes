@@ -1,6 +1,6 @@
 extern crate amcl;
 
-use super::amcl_utils::{ate_pairing, hash_on_g1, GeneratorG2};
+use super::amcl_utils::{ate_pairing, hash_on_g2, GeneratorG1, FP12};
 use super::errors::DecodeError;
 use super::g1::G1Point;
 use super::g2::G2Point;
@@ -12,7 +12,7 @@ use super::signature::Signature;
 /// This may be used to verify some AggregateSignature.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AggregatePublicKey {
-    pub point: G2Point,
+    pub point: G1Point,
 }
 
 impl AggregatePublicKey {
@@ -20,7 +20,7 @@ impl AggregatePublicKey {
     ///
     /// The underlying point will be set to infinity.
     pub fn new() -> Self {
-        let mut point = G2Point::new();
+        let mut point = G1Point::new();
         // TODO: check why this inf call
         point.inf();
         Self { point }
@@ -46,7 +46,7 @@ impl AggregatePublicKey {
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregatePublicKey, DecodeError> {
-        let point = G2Point::from_bytes(bytes)?;
+        let point = G1Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
@@ -69,7 +69,7 @@ impl Default for AggregatePublicKey {
 /// This may be verified against some AggregatePublicKey.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AggregateSignature {
-    pub point: G1Point,
+    pub point: G2Point,
 }
 
 impl AggregateSignature {
@@ -77,8 +77,7 @@ impl AggregateSignature {
     ///
     /// The underlying point will be set to infinity.
     pub fn new() -> Self {
-        let mut point = G1Point::new();
-        // TODO: check why this inf call
+        let mut point = G2Point::new();
         point.inf();
         Self { point }
     }
@@ -92,17 +91,60 @@ impl AggregateSignature {
     ///
     /// All PublicKeys which signed across this AggregateSignature must be included in the
     /// AggregatePublicKey, otherwise verification will fail.
-    pub fn verify(&self, msg: &[u8], avk: &AggregatePublicKey) -> bool {
-        if self.point.is_infinity() {
+    pub fn verify(&self, msg: &[u8], d: u64, avk: &AggregatePublicKey) -> bool {
+        // Check points are valid
+        if self.point.is_infinity() || avk.point.is_infinity() {
             return false;
         }
         let mut sig_point = self.point.clone();
         let mut key_point = avk.point.clone();
         sig_point.affine();
         key_point.affine();
-        let msg_hash_point = hash_on_g1(msg);
-        let mut lhs = ate_pairing(&GeneratorG2, sig_point.as_raw());
-        let mut rhs = ate_pairing(&key_point.as_raw(), &msg_hash_point);
+        let msg_hash_point = hash_on_g2(msg, d);
+        let mut lhs = ate_pairing(sig_point.as_raw(), &GeneratorG1);
+        let mut rhs = ate_pairing(&msg_hash_point, &key_point.as_raw());
+        lhs.equals(&mut rhs)
+    }
+
+    /// Verify this AggregateSignature against multiple AggregatePublickeys with multiple Messages.
+    ///
+    ///  All PublicKeys related to a Message should be aggregated into one AggregatePublicKey.
+    ///  Each AggregatePublicKey has a 1:1 ratio with a 32 byte Message.
+    pub fn verify_multiple(&self, msg: &[u8], d: u64, avks: &[AggregatePublicKey]) -> bool {
+        // Check AggregateSignature point is valid
+        if self.point.is_infinity() {
+            return false;
+        }
+        let mut sig_point = self.point.clone();
+        sig_point.affine();
+
+        // Messages are 32 bytes and need a 1:1 ratio to AggregatePublicKeys
+        if msg.len() != 32 * avks.len() || avks.len() == 0 {
+            return false;
+        }
+
+        // Aggregate each AggregatePublicKey with a Message
+        let mut lhs = FP12::new();
+        for (i, key) in avks.iter().enumerate() {
+            // Check point is valid
+            if key.point.is_infinity() {
+                return false;
+            }
+
+            let mut key_point = key.point.clone();
+            key_point.affine();
+            let pair = ate_pairing(
+                &hash_on_g2(&msg[i * 32..(i + 1) * 32], d),
+                key_point.as_raw(),
+            );
+            if i == 0 {
+                lhs = pair;
+            } else {
+                lhs.mul(&pair);
+            }
+        }
+
+        let mut rhs = ate_pairing(sig_point.as_raw(), &GeneratorG1);
         lhs.equals(&mut rhs)
     }
 
@@ -110,7 +152,7 @@ impl AggregateSignature {
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregateSignature, DecodeError> {
-        let point = G1Point::from_bytes(bytes)?;
+        let point = G2Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
@@ -157,11 +199,12 @@ mod tests {
             .collect();
 
         let message = "cats".as_bytes();
+        let domain = 42;
 
         let mut agg_sig = AggregateSignature::new();
         let mut agg_pub_key = AggregatePublicKey::new();
         for keypair in &signing_keypairs {
-            let sig = Signature::new(&message, &keypair.sk);
+            let sig = Signature::new(&message, domain, &keypair.sk);
             agg_sig.add(&sig);
             agg_pub_key.add(&keypair.pk);
         }
@@ -171,7 +214,7 @@ mod tests {
         let agg_sig = AggregateSignature::from_bytes(&agg_sig_bytes).unwrap();
         let agg_pub_key = AggregatePublicKey::from_bytes(&agg_pub_bytes).unwrap();
 
-        assert!(agg_sig.verify(&message, &agg_pub_key));
+        assert!(agg_sig.verify(&message, domain, &agg_pub_key));
     }
 
     fn map_secret_bytes_to_keypairs(secret_key_bytes: Vec<Vec<u8>>) -> Vec<Keypair> {
@@ -203,14 +246,15 @@ mod tests {
             "cats lol".as_bytes(),
             &[42_u8; 133700],
         ];
+        let domain = 42;
 
         for message in messages {
             let mut agg_signature = AggregateSignature::new();
             let mut signing_agg_pub = AggregatePublicKey::new();
             for keypair in &signing_kps {
-                let sig = Signature::new(&message, &keypair.sk);
-                assert!(sig.verify(&message, &keypair.pk));
-                assert!(!sig.verify(&message, &control_kp.pk));
+                let sig = Signature::new(&message, domain, &keypair.sk);
+                assert!(sig.verify(&message, domain, &keypair.pk));
+                assert!(!sig.verify(&message, domain, &control_kp.pk));
                 agg_signature.add(&sig);
                 signing_agg_pub.add(&keypair.pk);
             }
@@ -218,7 +262,7 @@ mod tests {
             /*
              * The full set of signed keys should pass verification.
              */
-            assert!(agg_signature.verify(&message, &signing_agg_pub));
+            assert!(agg_signature.verify(&message, domain, &signing_agg_pub));
 
             /*
              * The full set of signed keys aggregated in reverse order
@@ -228,7 +272,7 @@ mod tests {
             for i in (0..signing_kps.len()).rev() {
                 rev_signing_agg_pub.add(&signing_kps[i].pk);
             }
-            assert!(agg_signature.verify(&message, &rev_signing_agg_pub));
+            assert!(agg_signature.verify(&message, domain, &rev_signing_agg_pub));
 
             /*
              * The full set of signed keys aggregated in non-sequential
@@ -249,16 +293,16 @@ mod tests {
             for i in order {
                 shuffled_signing_agg_pub.add(&signing_kps[i].pk);
             }
-            assert!(agg_signature.verify(&message, &shuffled_signing_agg_pub));
+            assert!(agg_signature.verify(&message, domain, &shuffled_signing_agg_pub));
 
             /*
              * The signature should fail if an signing key has double-signed the
              * aggregate signature.
              */
             let mut double_sig_agg_sig = agg_signature.clone();
-            let extra_sig = Signature::new(&message, &signing_kps[0].sk);
+            let extra_sig = Signature::new(&message, domain, &signing_kps[0].sk);
             double_sig_agg_sig.add(&extra_sig);
-            assert!(!double_sig_agg_sig.verify(&message, &signing_agg_pub));
+            assert!(!double_sig_agg_sig.verify(&message, domain, &signing_agg_pub));
 
             /*
              * The full set of signed keys should fail verification if one key signs across a
@@ -271,45 +315,45 @@ mod tests {
                     0 => "different_msg!1".as_bytes(),
                     _ => message,
                 };
-                let sig = Signature::new(&message, &kp.sk);
+                let sig = Signature::new(&message, domain, &kp.sk);
                 distinct_msg_agg_sig.add(&sig);
                 distinct_msg_agg_pub.add(&kp.pk);
             }
-            assert!(!distinct_msg_agg_sig.verify(&message, &distinct_msg_agg_pub));
+            assert!(!distinct_msg_agg_sig.verify(&message, domain, &distinct_msg_agg_pub));
 
             /*
              * The signature should fail if an extra, non-signing key has signed the
              * aggregate signature.
              */
             let mut super_set_agg_sig = agg_signature.clone();
-            let extra_sig = Signature::new(&message, &non_signing_kps[0].sk);
+            let extra_sig = Signature::new(&message, domain, &non_signing_kps[0].sk);
             super_set_agg_sig.add(&extra_sig);
-            assert!(!super_set_agg_sig.verify(&message, &signing_agg_pub));
+            assert!(!super_set_agg_sig.verify(&message, domain, &signing_agg_pub));
 
             /*
              * A subset of signed keys should fail verification.
              */
             let mut subset_pub_keys = signing_kps_subset.iter().map(|kp| kp.pk.clone()).collect();
             let subset_agg_key = AggregatePublicKey::from_public_keys(&subset_pub_keys);
-            assert!(!agg_signature.verify(&message, &subset_agg_key));
+            assert!(!agg_signature.verify(&message, domain, &subset_agg_key));
             // Sanity check the subset test by completing the set and verifying it.
             subset_pub_keys.push(signing_kps[signing_kps.len() - 1].pk.clone());
             let subset_agg_key = AggregatePublicKey::from_public_keys(&subset_pub_keys);
-            assert!(agg_signature.verify(&message, &subset_agg_key));
+            assert!(agg_signature.verify(&message, domain, &subset_agg_key));
 
             /*
              * A set of keys which did not sign the message at all should fail
              */
             let mut non_signing_pub_keys = non_signing_kps.iter().map(|kp| kp.pk.clone()).collect();
             let non_signing_agg_key = AggregatePublicKey::from_public_keys(&non_signing_pub_keys);
-            assert!(!agg_signature.verify(&message, &non_signing_agg_key));
+            assert!(!agg_signature.verify(&message, domain, &non_signing_agg_key));
 
             /*
              * An empty aggregate pub key (it has not had any keys added to it) should
              * fail.
              */
             let empty_agg_pub = AggregatePublicKey::new();
-            assert!(!agg_signature.verify(&message, &empty_agg_pub));
+            assert!(!agg_signature.verify(&message, domain, &empty_agg_pub));
         }
     }
 
@@ -401,5 +445,128 @@ mod tests {
         ];
         let non_signing_kps = map_secret_bytes_to_keypairs(non_signing_secret_key_bytes);
         helper_test_aggregate_public_keys(control_kp, signing_kps, non_signing_kps);
+    }
+
+    #[test]
+    pub fn test_verify_multiple_true() {
+        let domain = 45 as u64;
+        let mut msg_1: Vec<u8> = vec![111; 32];
+        let mut msg_2: Vec<u8> = vec![222; 32];
+
+        // To form first AggregatePublicKey (and sign messages)
+        let mut aggregate_signature = AggregateSignature::new();
+        let keypair_1 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_1, domain, &keypair_1.sk));
+        let keypair_2 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_1, domain, &keypair_2.sk));
+        let keypair_3 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_1, domain, &keypair_3.sk));
+        let apk_1 =
+            AggregatePublicKey::from_public_keys(&vec![keypair_1.pk, keypair_2.pk, keypair_3.pk]);
+        // Verify with one AggregateSignature and Message (same functionality as AggregateSignature::verify())
+        assert!(aggregate_signature.verify_multiple(&msg_1, domain, &vec![apk_1.clone()]));
+
+        // To form second AggregatePublicKey (and sign messages)
+        let keypair_1 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_2, domain, &keypair_1.sk));
+        let keypair_2 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_2, domain, &keypair_2.sk));
+        let keypair_3 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_2, domain, &keypair_3.sk));
+        let apk_2 =
+            AggregatePublicKey::from_public_keys(&vec![keypair_1.pk, keypair_2.pk, keypair_3.pk]);
+
+        msg_1.append(&mut msg_2);
+        let apks: Vec<AggregatePublicKey> = vec![apk_1, apk_2];
+        assert!(aggregate_signature.verify_multiple(&msg_1, domain, &apks));
+    }
+
+    #[test]
+    #[ignore]
+    pub fn test_verify_multiple_true_large() {
+        // Testing large number of PublicKeys
+        // Default to ignore as this takes about 10mins
+        let domain = 45;
+        let mut msg_1: Vec<u8> = vec![11; 32];
+        let mut msg_2: Vec<u8> = vec![22; 32];
+        let mut aggregate_signature = AggregateSignature::new();
+        let mut apk_1 = AggregatePublicKey::new();
+        let mut apk_2 = AggregatePublicKey::new();
+        for _ in 0..1024 {
+            let key_1 = Keypair::random();
+            let key_2 = Keypair::random();
+            apk_1.add(&key_1.pk);
+            apk_2.add(&key_2.pk);
+            aggregate_signature.add(&Signature::new(&msg_1, domain, &key_1.sk));
+            aggregate_signature.add(&Signature::new(&msg_2, domain, &key_2.sk));
+        }
+
+        msg_1.append(&mut msg_2);
+        assert!(aggregate_signature.verify_multiple(&msg_1, domain, &vec![apk_1, apk_2]));
+    }
+
+    #[test]
+    pub fn test_verify_multiple_false() {
+        let domain = 45 as u64;
+        let mut msg_1: Vec<u8> = vec![111; 32];
+        let mut msg_2: Vec<u8> = vec![222; 32];
+
+        // To form first AggregatePublicKey (and sign messages)
+        let mut aggregate_signature = AggregateSignature::new();
+        let keypair_1 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_1, domain, &keypair_1.sk));
+        let keypair_2 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_1, domain, &keypair_2.sk));
+        let keypair_3 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_1, domain, &keypair_3.sk));
+
+        // Too few public keys
+        let apk_1 =
+            AggregatePublicKey::from_public_keys(&vec![keypair_1.pk.clone(), keypair_2.pk.clone()]);
+        assert!(!aggregate_signature.verify_multiple(&msg_1, domain, &vec![apk_1]));
+
+        // Too many public keys
+        let apk_1 = AggregatePublicKey::from_public_keys(&vec![
+            keypair_1.pk.clone(),
+            keypair_2.pk.clone(),
+            keypair_3.pk.clone(),
+            keypair_3.pk.clone(),
+        ]);
+        assert!(!aggregate_signature.verify_multiple(&msg_1, domain, &vec![apk_1]));
+
+        // Signature does not match message
+        let apk_1 =
+            AggregatePublicKey::from_public_keys(&vec![keypair_1.pk, keypair_2.pk, keypair_3.pk]);
+        assert!(!aggregate_signature.verify_multiple(&msg_2, domain, &vec![apk_1.clone()]));
+
+        // Too many AgregatePublicKeys
+        assert!(!aggregate_signature.verify_multiple(
+            &msg_1,
+            domain,
+            &vec![apk_1.clone(), apk_1.clone()]
+        ));
+
+        // Incorrect domain
+        assert!(!aggregate_signature.verify_multiple(&msg_1, 46, &vec![apk_1.clone()]));
+
+        // To form second AggregatePublicKey and second Message
+        msg_2.push(222); // msg_2 now 33 bytes
+        let keypair_1 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_2, domain, &keypair_1.sk));
+        let keypair_2 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_2, domain, &keypair_2.sk));
+        let keypair_3 = Keypair::random();
+        aggregate_signature.add(&Signature::new(&msg_2, domain, &keypair_3.sk));
+        let apk_2 =
+            AggregatePublicKey::from_public_keys(&vec![keypair_1.pk, keypair_2.pk, keypair_3.pk]);
+        msg_1.append(&mut msg_2);
+        let apks: Vec<AggregatePublicKey> = vec![apk_1.clone(), apk_2.clone()];
+
+        // Messages 2 is too long even though signed appropriately
+        assert!(!aggregate_signature.verify_multiple(&msg_1, domain, &apks));
+
+        // Message 2 is correct length but has not been signed correctly
+        msg_1.pop();
+        assert!(!aggregate_signature.verify_multiple(&msg_1, domain, &vec![apk_1, apk_2]));
     }
 }

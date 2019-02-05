@@ -87,3 +87,9 @@ impl PartialEq for G1Point {
 }
 
 impl Eq for G1Point {}
+
+impl Default for G1Point {
+    fn default() -> Self {
+        Self::new()
+    }
+}

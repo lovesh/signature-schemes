@@ -1,9 +1,9 @@
 extern crate amcl;
 extern crate rand;
 
-use super::amcl_utils::{BigNum, GeneratorG2, CURVE_ORDER, MODBYTES, MOD_BYTE_SIZE};
+use super::amcl_utils::{BigNum, GeneratorG1, CURVE_ORDER, MODBYTES, MOD_BYTE_SIZE};
 use super::errors::DecodeError;
-use super::g2::G2Point;
+use super::g1::G1Point;
 use super::rng::get_seeded_rng;
 use std::fmt;
 
@@ -59,20 +59,20 @@ impl Eq for SecretKey {}
 /// A BLS public key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKey {
-    pub point: G2Point,
+    pub point: G1Point,
 }
 
 impl PublicKey {
     /// Instantiate a PublicKey from some SecretKey.
     pub fn from_secret_key(sk: &SecretKey) -> Self {
         PublicKey {
-            point: G2Point::from_raw(GeneratorG2.mul(&sk.x)),
+            point: G1Point::from_raw(GeneratorG1.mul(&sk.x)),
         }
     }
 
     /// Instantiate a PublicKey from some bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, DecodeError> {
-        let point = G2Point::from_bytes(bytes)?;
+        let point = G1Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
@@ -139,23 +139,25 @@ mod tests {
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
         let pk = PublicKey::from_secret_key(&sk);
+        let domain = 42;
 
         let message = "cats".as_bytes();
-        let signature = Signature::new(&message, &sk);
-        assert!(signature.verify(&message, &pk));
+        let signature = Signature::new(&message, domain, &sk);
+        assert!(signature.verify(&message, domain, &pk));
 
         let pk_bytes = pk.as_bytes();
         let pk = PublicKey::from_bytes(&pk_bytes).unwrap();
-        assert!(signature.verify(&message, &pk));
+        assert!(signature.verify(&message, domain, &pk));
     }
 
     #[test]
     fn test_random_secret_key_can_sign() {
         let sk = SecretKey::random();
         let pk = PublicKey::from_secret_key(&sk);
+        let domain = 42;
 
         let message = "cats".as_bytes();
-        let signature = Signature::new(&message, &sk);
-        assert!(signature.verify(&message, &pk));
+        let signature = Signature::new(&message, domain, &sk);
+        assert!(signature.verify(&message, domain, &pk));
     }
 }
