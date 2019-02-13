@@ -22,6 +22,7 @@ use bls381::big::BIG;
 use bls381::big;
 use bls381::rom;
 
+#[derive(Copy, Clone)]
 pub struct ECP {
 	x:FP,
 	y:FP,
@@ -72,9 +73,9 @@ impl ECP {
 /* set (x,y) from two BIGs */
 	pub fn new_bigs(ix: &BIG,iy: &BIG) -> ECP {
 		let mut E=ECP::new();
-		E.x.bcopy(ix); 
-		E.y.bcopy(iy); 
-		E.z.one(); 
+		E.x.bcopy(ix);
+		E.y.bcopy(iy);
+		E.z.one();
 		let mut rhs=ECP::rhs(&mut E.x);
 		if CURVETYPE==MONTGOMERY {
 			if rhs.jacobi()==1 {
@@ -82,7 +83,7 @@ impl ECP {
 			} else {E.inf()}
 		} else {
 			let mut y2=FP::new_copy(&E.y);
-			y2.sqr();	
+			y2.sqr();
 			if y2.equals(&mut rhs) {
 			//	E.inf=false
 			} else {E.inf()}
@@ -93,8 +94,8 @@ impl ECP {
 /* set (x,y) from BIG and a bit */
 	pub fn new_bigint(ix: &BIG,s: isize) -> ECP {
 		let mut E=ECP::new();
-		E.x.bcopy(ix); 
-		E.z.one(); 
+		E.x.bcopy(ix);
+		E.z.one();
 
 		let mut rhs=ECP::rhs(&mut E.x);
 
@@ -111,8 +112,8 @@ impl ECP {
 /* set from x - calculate y from curve equation */
 	pub fn new_big(ix: &BIG) -> ECP {
 		let mut E=ECP::new();
-		E.x.bcopy(ix); 
-		E.z.one(); 
+		E.x.bcopy(ix);
+		E.z.one();
 		let mut rhs=ECP::rhs(&mut E.x);
 		if rhs.jacobi()==1 {
 			if CURVETYPE!=MONTGOMERY {E.y.copy(&rhs.sqrt())}
@@ -150,7 +151,7 @@ impl ECP {
 			}
 			r.add(&b);
 		}
-		if CURVETYPE==EDWARDS { // (Ax^2-1)/(Bx^2-1) 
+		if CURVETYPE==EDWARDS { // (Ax^2-1)/(Bx^2-1)
 			let mut b=FP::new_big(&BIG::new_ints(&rom::CURVE_B));
 			let one=FP::new_int(1);
 			b.mul(&r);
@@ -197,7 +198,7 @@ impl ECP {
 		self.x.cswap(&mut Q.x,d);
 		if CURVETYPE!=MONTGOMERY {self.y.cswap(&mut Q.y,d)}
 		self.z.cswap(&mut Q.z,d);
-/*		
+/*
 		let mut bd=true;
 		if d==0 {bd=false}
 		bd=bd&&(self.inf!=Q.inf);
@@ -210,7 +211,7 @@ impl ECP {
 		self.x.cmove(&Q.x,d);
 		if CURVETYPE!=MONTGOMERY {self.y.cmove(&Q.y,d)}
 		self.z.cmove(&Q.z,d);
-	/*	
+	/*
 		let mut bd=true;
 		if d==0 {bd=false}
 		self.inf=(self.inf!=((self.inf!=Q.inf)&&bd)); */
@@ -263,7 +264,7 @@ impl ECP {
 		self.cmove(&W[5],ECP::teq(babs,5));
 		self.cmove(&W[6],ECP::teq(babs,6));
 		self.cmove(&W[7],ECP::teq(babs,7));
- 
+
 		MP.copy(self);
 		MP.neg();
 		self.cmove(&MP,(m&1) as isize);
@@ -276,12 +277,12 @@ impl ECP {
 
 		let mut a=FP::new();
 		let mut b=FP::new();
-		a.copy(&self.x); a.mul(&Q.z); 
-		b.copy(&Q.x); b.mul(&self.z); 
+		a.copy(&self.x); a.mul(&Q.z);
+		b.copy(&Q.x); b.mul(&self.z);
 		if !a.equals(&mut b) {return false}
 		if CURVETYPE!=MONTGOMERY {
-			a.copy(&self.y); a.mul(&Q.z); 
-			b.copy(&Q.y); b.mul(&self.z); 
+			a.copy(&self.y); a.mul(&Q.z);
+			b.copy(&Q.y); b.mul(&self.z);
 			if !a.equals(&mut b) {return false}
 		}
 		return true;
@@ -349,8 +350,8 @@ impl ECP {
 		if CURVETYPE==MONTGOMERY {
 			b[0]=0x06;
 			return;
-		} 
-	
+		}
+
 		if compress {
 			b[0]=0x02;
 			if self.y.redc().parity()==1 {b[0]=0x03}
@@ -358,7 +359,7 @@ impl ECP {
 		}
 
 		b[0]=0x04;
-		
+
 		self.y.redc().tobytes(&mut t);
 		for i in 0..mb {b[i+mb+1]=t[i]}
 	}
@@ -382,7 +383,7 @@ impl ECP {
 			let py=BIG::frombytes(&t);
 			if BIG::comp(&py,&p)>=0 {return ECP::new()}
 			return ECP::new_bigs(&px,&py);
-		} 
+		}
 
 		if b[0]==0x02 || b[0]==0x03 {
 			return ECP::new_bigint(&px,(b[0]&1) as isize)
@@ -397,7 +398,7 @@ impl ECP {
 		self.affine();
 		if CURVETYPE==MONTGOMERY {
 			return format!("({})",self.x.redc().tostring());
-		} else {return format!("({},{})",self.x.redc().tostring(),self.y.redc().tostring())} ; 
+		} else {return format!("({},{})",self.x.redc().tostring(),self.y.redc().tostring())} ;
 	}
 
 /* this*=2 */
@@ -407,7 +408,7 @@ impl ECP {
 		if CURVETYPE==WEIERSTRASS {
 
 			if rom::CURVE_A==0 {
-				let mut t0=FP::new_copy(&self.y);     
+				let mut t0=FP::new_copy(&self.y);
 				t0.sqr();
 				let mut t1=FP::new_copy(&self.y);
 				t1.mul(&self.z);
@@ -415,7 +416,7 @@ impl ECP {
 				t2.sqr();
 
 				self.z.copy(&t0);
-				self.z.add(&t0); self.z.norm(); 
+				self.z.add(&t0); self.z.norm();
 				self.z.dbl(); self.z.dbl(); self.z.norm();
 				t2.imul(3*rom::CURVE_B_I);
 
@@ -424,12 +425,12 @@ impl ECP {
 
 				let mut y3=FP::new_copy(&t0);
 				y3.add(&t2); y3.norm();
-				self.z.mul(&t1); 
+				self.z.mul(&t1);
 				t1.copy(&t2); t1.add(&t2); t2.add(&t1);
 				t0.sub(&t2); t0.norm(); y3.mul(&t0); y3.add(&x3);
-				t1.copy(&self.x); t1.mul(&self.y); 
+				t1.copy(&self.x); t1.mul(&self.y);
 				self.x.copy(&t0); self.x.norm(); self.x.mul(&t1); self.x.dbl();
-				self.x.norm(); 
+				self.x.norm();
 				self.y.copy(&y3); self.y.norm();
 
 			} else {
@@ -455,14 +456,14 @@ impl ECP {
 				t3.dbl(); t3.norm();//5
 				z3.mul(&self.x);   //6
 				z3.dbl();  z3.norm();//7
-				y3.copy(&t2); 
-				
+				y3.copy(&t2);
+
 				if rom::CURVE_B_I==0 {
 					y3.mul(&b); //8
 				} else {
 					y3.imul(rom::CURVE_B_I);
 				}
-				
+
 				y3.sub(&z3); //y3.norm(); //9  ***
 				x3.copy(&y3); x3.add(&y3); x3.norm();//10
 
@@ -499,7 +500,7 @@ impl ECP {
 				t1.dbl(); t1.norm();//33
 				z3.copy(&t0); z3.mul(&t1);//34
 
-				self.x.copy(&x3); self.x.norm(); 
+				self.x.copy(&x3); self.x.norm();
 				self.y.copy(&y3); self.y.norm();
 				self.z.copy(&z3); self.z.norm();
 
@@ -511,21 +512,21 @@ impl ECP {
             let mut d=FP::new_copy(&self.y);
             let mut h=FP::new_copy(&self.z);
             let mut j=FP::new();
-    
+
             self.x.mul(&self.y); self.x.dbl(); self.x.norm();
             c.sqr();
             d.sqr();
             if rom::CURVE_A == -1 {c.neg()}
             self.y.copy(&c); self.y.add(&d);
             self.y.norm();
-            h.sqr(); h.dbl(); 
+            h.sqr(); h.dbl();
             self.z.copy(&self.y);
             j.copy(&self.y); j.sub(&h); j.norm();
             self.x.mul(&j);
             c.sub(&d); c.norm();
             self.y.mul(&c);
             self.z.mul(&j);
-    
+
         //    self.x.norm();
         //    self.y.norm();
         //    self.z.norm();
@@ -536,21 +537,21 @@ impl ECP {
             let mut aa=FP::new();
             let mut bb=FP::new();
             let mut c=FP::new();
-    
-    
+
+
             a.add(&self.z); a.norm();
             aa.copy(&a); aa.sqr();
             b.sub(&self.z); b.norm();
             bb.copy(&b); bb.sqr();
             c.copy(&aa); c.sub(&bb); c.norm();
-    
+
             self.x.copy(&aa); self.x.mul(&bb);
-    
+
             a.copy(&c); a.imul((rom::CURVE_A+2)/4);
-    
+
             bb.add(&a); bb.norm();
             self.z.copy(&bb); self.z.mul(&c);
- 
+
         }
         return;
     }
@@ -565,10 +566,10 @@ impl ECP {
         if Q.inf {return}  */
 
         if CURVETYPE==WEIERSTRASS {
- 
+
 			if rom::CURVE_A==0 {
 				let b=3*rom::CURVE_B_I;
-				let mut t0=FP::new_copy(&self.x); 
+				let mut t0=FP::new_copy(&self.x);
 				t0.mul(&Q.x);
 				let mut t1=FP::new_copy(&self.y);
 				t1.mul(&Q.y);
@@ -590,7 +591,7 @@ impl ECP {
 				t4.mul(&x3);
 				x3.copy(&t1);
 				x3.add(&t2);
-	
+
 				t4.sub(&x3); t4.norm();
 				x3.copy(&self.x); x3.add(&self.z); x3.norm();
 				let mut y3=FP::new_copy(&Q.x);
@@ -599,19 +600,19 @@ impl ECP {
 				y3.copy(&t0);
 				y3.add(&t2);
 				y3.rsub(&x3); y3.norm();
-				x3.copy(&t0); x3.add(&t0); 
+				x3.copy(&t0); x3.add(&t0);
 				t0.add(&x3); t0.norm();
 				t2.imul(b);
 
 				let mut z3=FP::new_copy(&t1); z3.add(&t2); z3.norm();
-				t1.sub(&t2); t1.norm(); 
+				t1.sub(&t2); t1.norm();
 				y3.imul(b);
-	
+
 				x3.copy(&y3); x3.mul(&t4); t2.copy(&t3); t2.mul(&t1); x3.rsub(&t2);
 				y3.mul(&t0); t1.mul(&z3); y3.add(&t1);
 				t0.mul(&t3); z3.mul(&t4); z3.add(&t0);
 
-				self.x.copy(&x3); self.x.norm(); 
+				self.x.copy(&x3); self.x.norm();
 				self.y.copy(&y3); self.y.norm();
 				self.z.copy(&z3); self.z.norm();
 			} else {
@@ -652,15 +653,15 @@ impl ECP {
 				y3.copy(&t0); y3.add(&t2); //y3.norm();//17
 
 				y3.rsub(&x3); y3.norm(); //18
-				z3.copy(&t2); 
-				
+				z3.copy(&t2);
+
 
 				if rom::CURVE_B_I==0 {
 					z3.mul(&b); //18
 				} else {
 					z3.imul(rom::CURVE_B_I);
 				}
-				
+
 				x3.copy(&y3); x3.sub(&z3); x3.norm(); //20
 				z3.copy(&x3); z3.add(&x3); //z3.norm(); //21
 
@@ -694,8 +695,8 @@ impl ECP {
 				x3.sub(&t1);//40
 				z3.mul(&t4);//41
 				t1.copy(&t3); t1.mul(&t0);//42
-				z3.add(&t1); 
-				self.x.copy(&x3); self.x.norm(); 
+				z3.add(&t1);
+				self.x.copy(&x3); self.x.norm();
 				self.y.copy(&y3); self.y.norm();
 				self.z.copy(&z3); self.z.norm();
 
@@ -710,23 +711,23 @@ impl ECP {
             let mut e=FP::new();
             let mut f=FP::new();
             let mut g=FP::new();
-    
+
             a.mul(&Q.z);
             b.copy(&a); b.sqr();
             c.mul(&Q.x);
             d.mul(&Q.y);
-    
+
             e.copy(&c); e.mul(&d); e.mul(&bb);
             f.copy(&b); f.sub(&e);
             g.copy(&b); g.add(&e);
-    
+
             if rom::CURVE_A==1 {
 				e.copy(&d); e.sub(&c);
             }
             c.add(&d);
-    
+
             b.copy(&self.x); b.add(&self.y);
-            d.copy(&Q.x); d.add(&Q.y); 
+            d.copy(&Q.x); d.add(&Q.y);
             b.norm(); d.norm();
             b.mul(&d);
             b.sub(&c);
@@ -754,7 +755,7 @@ impl ECP {
 		let mut d=FP::new_copy(&Q.x);
 		let mut da=FP::new();
 		let mut cb=FP::new();
-			
+
 		a.add(&self.z);
 		b.sub(&self.z);
 
@@ -784,7 +785,7 @@ impl ECP {
 	}
 
 /* constant time multiply by small integer of length bts - use ladder */
-	pub fn pinmul(&self,e: i32,bts: i32) -> ECP {	
+	pub fn pinmul(&self,e: i32,bts: i32) -> ECP {
 		if CURVETYPE==MONTGOMERY {
 			return self.mul(&mut BIG::new_int(e as isize));
 		} else {
@@ -832,7 +833,7 @@ impl ECP {
 			}
 			P.copy(&R0)
 		} else {
-// fixed size windows 
+// fixed size windows
 			let mut mt=BIG::new();
 			let mut t=BIG::new();
 			let mut Q=ECP::new();
@@ -856,7 +857,7 @@ impl ECP {
 				W[i].add(&mut Q);
 			}
 
-// make exponent odd - add 2P if even, P if odd 
+// make exponent odd - add 2P if even, P if odd
 			t.copy(&e);
 			let s=t.parity();
 			t.inc(1); t.norm(); let ns=t.parity(); mt.copy(&t); mt.inc(1); mt.norm();
@@ -866,15 +867,15 @@ impl ECP {
 
 			let nb=1+(t.nbits()+3)/4;
 
-// convert exponent to signed 4-bit window 
+// convert exponent to signed 4-bit window
 			for i in 0..nb {
 				w[i]=(t.lastbits(5)-16) as i8;
 				t.dec(w[i] as isize); t.norm();
-				t.fshr(4);	
+				t.fshr(4);
 			}
 			w[nb]=t.lastbits(5) as i8;
 
-			P.copy(&W[((w[nb] as usize)-1)/2]); 
+			P.copy(&W[((w[nb] as usize)-1)/2]);
 			for i in (0..nb).rev() {
 				Q.selector(&W,w[i] as i32);
 				P.dbl();
@@ -902,7 +903,7 @@ impl ECP {
 		let mut W:[ECP;8]=[ECP::new(),ECP::new(),ECP::new(),ECP::new(),ECP::new(),ECP::new(),ECP::new(),ECP::new()];
 
 		const CT:usize=1+(big::NLEN*(big::BASEBITS as usize)+1)/2;
-		let mut w: [i8;CT]=[0;CT];		
+		let mut w: [i8;CT]=[0;CT];
 
 	//	self.affine();
 	//	Q.affine();
@@ -910,7 +911,7 @@ impl ECP {
 		te.copy(e);
 		tf.copy(f);
 
-// precompute table 
+// precompute table
 
 		W[1].copy(&self); W[1].sub(Q);
 		W[2].copy(&self); W[2].add(Q);
@@ -923,7 +924,7 @@ impl ECP {
 		C.copy(&W[5]); W[4].copy(&C); W[4].sub(&mut S);
 		C.copy(&W[6]); W[7].copy(&C); W[7].add(&mut S);
 
-// if multiplier is odd, add 2, else add 1 to multiplier, and add 2P or P to correction 
+// if multiplier is odd, add 2, else add 1 to multiplier, and add 2P or P to correction
 
 		let mut s=te.parity();
 		te.inc(1); te.norm(); let mut ns=te.parity(); mt.copy(&te); mt.inc(1); mt.norm();
@@ -940,7 +941,7 @@ impl ECP {
 		mt.copy(&te); mt.add(&tf); mt.norm();
 		let nb=1+(mt.nbits()+1)/2;
 
-// convert exponent to signed 2-bit window 
+// convert exponent to signed 2-bit window
 		for i in 0..nb {
 			let a=te.lastbits(3)-4;
 			te.dec(a); te.norm();
@@ -951,7 +952,7 @@ impl ECP {
 			w[i]=(4*a+b) as i8;
 		}
 		w[nb]=(4*te.lastbits(3)+tf.lastbits(3)) as i8;
-		S.copy(&W[((w[nb] as usize)-1)/2]);  
+		S.copy(&W[((w[nb] as usize)-1)/2]);
 
 		for i in (0..nb).rev() {
 			T.selector(&W,w[i] as i32);
@@ -971,7 +972,7 @@ impl ECP {
 			self.dbl(); self.dbl();
 			self.affine();
 			return;
-		} 
+		}
 		if cf==8 {
 			self.dbl(); self.dbl(); self.dbl();
 			self.affine();
@@ -979,7 +980,7 @@ impl ECP {
 		}
 		let c=BIG::new_ints(&rom::CURVE_COF);
 		let P=self.mul(&c);
-		self.copy(&P);	
+		self.copy(&P);
 	}
 
 
@@ -1003,22 +1004,22 @@ impl ECP {
 			P.cfp();
 			if !P.is_infinity() {break}
 		}
-			
-		return P;	
+
+		return P;
 	}
 
 	pub fn generator() -> ECP {
 		let G:ECP;
 
 		let gx=BIG::new_ints(&rom::CURVE_GX);
-	
+
 		if CURVETYPE!=MONTGOMERY {
 			let gy=BIG::new_ints(&rom::CURVE_GY);
 			G=ECP::new_bigs(&gx,&gy);
 		} else {
 			G=ECP::new_big(&gx);
 		}
-		return G;		
+		return G;
 	}
 
 }
@@ -1037,22 +1038,22 @@ fn main()
 	let mut r=BIG::new_ints(&rom::CURVE_ORDER);
 
 	//r.dec(7);
-	
+
 	println!("gx= {}",gx.tostring());
 
 	if CURVETYPE!=MONTGOMERY {
 		println!("gy= {}",gy.tostring());
-	}	
+	}
 
 	if CURVETYPE!=MONTGOMERY {
 		P.copy(&ECP::new_bigs(&gx,&gy))}
 	else  {P.copy(&ECP::new_big(&gx))}
 
-	println!("P= {}",P.tostring());		
+	println!("P= {}",P.tostring());
 
 	let mut R=P.mul(&mut r);
 		//for i in 0..10000	(R=P.mul(r));
-	
+
 	println!("R= {}",R.tostring());
 
 }

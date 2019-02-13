@@ -179,6 +179,7 @@ impl Default for AggregateSignature {
 mod tests {
     extern crate hex;
 
+    use super::super::amcl_utils::{compress_g1, compress_g2, decompress_g1, decompress_g2, GroupG1, GroupG2};
     use super::super::keys::{Keypair, SecretKey};
     use super::*;
 
@@ -579,20 +580,27 @@ mod tests {
 
     #[test]
     pub fn case06_aggregate_sigs() {
-        // TODO the signatures are encoded as 384 bit integers rather and (x,y)=(381 bits,381 bits) hence need to be decompressed
         // TODO: add yaml reader to check all elements
         // Test vector signatures
-        let sig1 = hex::decode("1351bdf582971f796bbaf6320e81251c9d28f674d720cca07ed14596b96697cf18238e0e03ebd7fc1353d885a39407e012cc74bc9f089ed9764bbceac5edba416bef5e73701288977b9cac1ccb6964269d4ebf78b4e8aa7792ba09d3e49c8e6a").unwrap();
-        let sig1 = Signature::from_bytes(&sig1).unwrap();
-        let sig2 = hex::decode("0c293ab7196ded8be31544ade7f733949db987b94ca8f7172b0c73b1f86459d8622d03ae6f8cd6285e4f785dba79639a02e45aea3554d02b97c0355756815469ee04e837cb841e02fde18cb3cc2924ace90e03c1e6b407981ab0ab38884cc22a").unwrap();
-        let sig2 = Signature::from_bytes(&sig2).unwrap();
-        let sig3 = hex::decode("8fc38adef9bc2d7407d0ac041d952efddaff5363f458b9d123e218172522e2bd82d9b7d65e6c1d8668607d1c5f8fe1da007727445a1baab6ad0d1d63b99f247f5fe12a08a0e98dac3acc7cd5cb8180ea699a8e525da9f9d7c14d1118dc011d28").unwrap();
-        let sig3 = Signature::from_bytes(&sig3).unwrap();
+        let mut bytes = hex::decode("1351bdf582971f796bbaf6320e81251c9d28f674d720cca07ed14596b96697cf18238e0e03ebd7fc1353d885a39407e012cc74bc9f089ed9764bbceac5edba416bef5e73701288977b9cac1ccb6964269d4ebf78b4e8aa7792ba09d3e49c8e6a").unwrap();
+        let mut point = decompress_g2(&mut bytes).unwrap();
+        let mut sig1 = Signature::new_from_raw(point);
+
+        let mut bytes = hex::decode("0c293ab7196ded8be31544ade7f733949db987b94ca8f7172b0c73b1f86459d8622d03ae6f8cd6285e4f785dba79639a02e45aea3554d02b97c0355756815469ee04e837cb841e02fde18cb3cc2924ace90e03c1e6b407981ab0ab38884cc22a").unwrap();
+        let mut point = decompress_g2(&mut bytes).unwrap();
+        let mut sig2 = Signature::new_from_raw(point);
+
+        let mut bytes = hex::decode("8fc38adef9bc2d7407d0ac041d952efddaff5363f458b9d123e218172522e2bd82d9b7d65e6c1d8668607d1c5f8fe1da007727445a1baab6ad0d1d63b99f247f5fe12a08a0e98dac3acc7cd5cb8180ea699a8e525da9f9d7c14d1118dc011d28").unwrap();
+        let mut point = decompress_g2(&mut bytes).unwrap();
+        let mut sig3 = Signature::new_from_raw(point);
+
 
         let mut aggregate_signature = AggregateSignature::new();
         aggregate_signature.add(&sig1);
         aggregate_signature.add(&sig2);
         aggregate_signature.add(&sig3);
+
+
         println!("{:?}", aggregate_signature.as_bytes());
     }
 }

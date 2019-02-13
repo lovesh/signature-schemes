@@ -23,6 +23,7 @@ use bls381::ecp;
 use bls381::fp2::FP2;
 use bls381::big::BIG;
 
+#[derive(Copy, Clone)]
 pub struct ECP2 {
 	x:FP2,
 	y:FP2,
@@ -59,7 +60,7 @@ impl ECP2 {
 }
 
 /* construct this from x - but set to O if not on curve */
-	pub fn new_fp2(ix:&FP2) -> ECP2 {	
+	pub fn new_fp2(ix:&FP2) -> ECP2 {
 		let mut E=ECP2::new();
 		E.x.copy(&ix);
 		E.y.one();
@@ -101,7 +102,7 @@ impl ECP2 {
 	pub fn neg(&mut self) {
 	//	if self.is_infinity() {return}
 		self.y.norm(); self.y.neg(); self.y.norm();
-	}	
+	}
 
 /* Conditional move of Q to self dependant on d */
 	pub fn cmove(&mut self,Q: &ECP2,d: isize) {
@@ -125,7 +126,7 @@ impl ECP2 {
 
 /* Constant time select from pre-computed table */
 	pub fn selector(&mut self,W: &[ECP2],b: i32) {
-		let mut MP=ECP2::new(); 
+		let mut MP=ECP2::new();
 		let m=b>>31;
 		let mut babs=(b^m)-m;
 
@@ -139,11 +140,11 @@ impl ECP2 {
 		self.cmove(&W[5],ECP2::teq(babs,5));
 		self.cmove(&W[6],ECP2::teq(babs,6));
 		self.cmove(&W[7],ECP2::teq(babs,7));
- 
+
 		MP.copy(self);
 		MP.neg();
 		self.cmove(&MP,(m&1) as isize);
-	}	
+	}
 
 /* Test if P == Q */
 	pub fn equals(&mut self,Q :&mut ECP2) -> bool {
@@ -151,7 +152,7 @@ impl ECP2 {
 	//	if self.is_infinity() || Q.is_infinity() {return false}
 
 		let mut a=FP2::new_copy(&self.x);
-		let mut b=FP2::new_copy(&Q.x); 
+		let mut b=FP2::new_copy(&Q.x);
 
 		a.mul(&Q.z);
 		b.mul(&self.z);
@@ -170,7 +171,7 @@ impl ECP2 {
 		if self.z.equals(&mut one) {return}
 		self.z.inverse();
 
-		self.x.mul(&self.z); self.x.reduce(); 
+		self.x.mul(&self.z); self.x.reduce();
 		self.y.mul(&self.z); self.y.reduce();
 		self.z.copy(&one);
 	}
@@ -242,7 +243,7 @@ impl ECP2 {
 		if self.is_infinity() {return String::from("infinity")}
 		self.affine();
 		return format!("({},{})",self.x.tostring(),self.y.tostring());
-}	
+}
 
 /* Calculate RHS of twisted curve equation x^3+B/i */
 	pub fn rhs(x:&mut FP2) -> FP2 {
@@ -271,45 +272,45 @@ impl ECP2 {
 	//	if self.inf {return -1}
 
 		let mut iy=FP2::new_copy(&self.y);
-		if ecp::SEXTIC_TWIST==ecp::D_TYPE {		
+		if ecp::SEXTIC_TWIST==ecp::D_TYPE {
 			iy.mul_ip(); iy.norm();
 		}
 
-		let mut t0=FP2::new_copy(&self.y);                  //***** Change 
+		let mut t0=FP2::new_copy(&self.y);                  //***** Change
 		t0.sqr();
-		if ecp::SEXTIC_TWIST==ecp::D_TYPE {		  
+		if ecp::SEXTIC_TWIST==ecp::D_TYPE {
 			t0.mul_ip();
-		}   
-		let mut t1=FP2::new_copy(&iy);  
+		}
+		let mut t1=FP2::new_copy(&iy);
 		t1.mul(&self.z);
 		let mut t2=FP2::new_copy(&self.z);
 		t2.sqr();
 
 		self.z.copy(&t0);
-		self.z.add(&t0); self.z.norm(); 
-		self.z.dbl(); 
-		self.z.dbl(); 
-		self.z.norm();  
+		self.z.add(&t0); self.z.norm();
+		self.z.dbl();
+		self.z.dbl();
+		self.z.norm();
 
-		t2.imul(3*rom::CURVE_B_I); 
-		if ecp::SEXTIC_TWIST==ecp::M_TYPE {	
+		t2.imul(3*rom::CURVE_B_I);
+		if ecp::SEXTIC_TWIST==ecp::M_TYPE {
 			t2.mul_ip();
-			t2.norm();	
+			t2.norm();
 		}
 		let mut x3=FP2::new_copy(&t2);
-		x3.mul(&self.z); 
+		x3.mul(&self.z);
 
-		let mut y3=FP2::new_copy(&t0);   
+		let mut y3=FP2::new_copy(&t0);
 
 		y3.add(&t2); y3.norm();
 		self.z.mul(&t1);
-		t1.copy(&t2); t1.add(&t2); t2.add(&t1); t2.norm();  
+		t1.copy(&t2); t1.add(&t2); t2.add(&t1); t2.norm();
 		t0.sub(&t2); t0.norm();                           //y^2-9bz^2
 		y3.mul(&t0); y3.add(&x3);                          //(y^2+3z*2)(y^2-9z^2)+3b.z^2.8y^2
 		t1.copy(&self.x); t1.mul(&iy);						//
 		self.x.copy(&t0); self.x.norm(); self.x.mul(&t1); self.x.dbl();       //(y^2-9bz^2)xy2
 
-		self.x.norm(); 
+		self.x.norm();
 		self.y.copy(&y3); self.y.norm();
 
 		return 1;
@@ -335,16 +336,16 @@ impl ECP2 {
 		t2.mul(&Q.z);
 		let mut t3=FP2::new_copy(&self.x);
 		t3.add(&self.y); t3.norm();          //t3=X1+Y1
-		let mut t4=FP2::new_copy(&Q.x);            
+		let mut t4=FP2::new_copy(&Q.x);
 		t4.add(&Q.y); t4.norm();			//t4=X2+Y2
 		t3.mul(&t4);						//t3=(X1+Y1)(X2+Y2)
 		t4.copy(&t0); t4.add(&t1);		//t4=X1.X2+Y1.Y2
 
-		t3.sub(&t4); t3.norm(); 
+		t3.sub(&t4); t3.norm();
 		if ecp::SEXTIC_TWIST==ecp::D_TYPE {
 			t3.mul_ip();  t3.norm();         //t3=(X1+Y1)(X2+Y2)-(X1.X2+Y1.Y2) = X1.Y2+X2.Y1
 		}
-		t4.copy(&self.y);                    
+		t4.copy(&self.y);
 		t4.add(&self.z); t4.norm();			//t4=Y1+Z1
 		let mut x3=FP2::new_copy(&Q.y);
 		x3.add(&Q.z); x3.norm();			//x3=Y2+Z2
@@ -352,13 +353,13 @@ impl ECP2 {
 		t4.mul(&x3);						//t4=(Y1+Z1)(Y2+Z2)
 		x3.copy(&t1);					//
 		x3.add(&t2);						//X3=Y1.Y2+Z1.Z2
-	
-		t4.sub(&x3); t4.norm(); 
+
+		t4.sub(&x3); t4.norm();
 		if ecp::SEXTIC_TWIST==ecp::D_TYPE {
 			t4.mul_ip(); t4.norm();          //t4=(Y1+Z1)(Y2+Z2) - (Y1.Y2+Z1.Z2) = Y1.Z2+Y2.Z1
 		}
 		x3.copy(&self.x); x3.add(&self.z); x3.norm();	// x3=X1+Z1
-		let mut y3=FP2::new_copy(&Q.x);				
+		let mut y3=FP2::new_copy(&Q.x);
 		y3.add(&Q.z); y3.norm();				// y3=X2+Z2
 		x3.mul(&y3);							// x3=(X1+Z1)(X2+Z2)
 		y3.copy(&t0);
@@ -369,16 +370,16 @@ impl ECP2 {
 			t0.mul_ip(); t0.norm(); // x.Q.x
 			t1.mul_ip(); t1.norm(); // y.Q.y
 		}
-		x3.copy(&t0); x3.add(&t0); 
+		x3.copy(&t0); x3.add(&t0);
 		t0.add(&x3); t0.norm();
-		t2.imul(b); 	
-		if ecp::SEXTIC_TWIST==ecp::M_TYPE {	
+		t2.imul(b);
+		if ecp::SEXTIC_TWIST==ecp::M_TYPE {
 			t2.mul_ip();
 		}
 		let mut z3=FP2::new_copy(&t1); z3.add(&t2); z3.norm();
-		t1.sub(&t2); t1.norm(); 
-		y3.imul(b); 
-		if ecp::SEXTIC_TWIST==ecp::M_TYPE {		
+		t1.sub(&t2); t1.norm();
+		y3.imul(b);
+		if ecp::SEXTIC_TWIST==ecp::M_TYPE {
 			y3.mul_ip();
 			y3.norm();
 		}
@@ -386,7 +387,7 @@ impl ECP2 {
 		y3.mul(&t0); t1.mul(&z3); y3.add(&t1);
 		t0.mul(&t3); z3.mul(&t4); z3.add(&t0);
 
-		self.x.copy(&x3); self.x.norm(); 
+		self.x.copy(&x3); self.x.norm();
 		self.y.copy(&y3); self.y.norm();
 		self.z.copy(&z3); self.z.norm();
 
@@ -429,14 +430,14 @@ impl ECP2 {
 		let mut W:[ECP2;8]=[ECP2::new(),ECP2::new(),ECP2::new(),ECP2::new(),ECP2::new(),ECP2::new(),ECP2::new(),ECP2::new()];
 
 		const CT:usize=1+(big::NLEN*(big::BASEBITS as usize)+3)/4;
-		let mut w:[i8;CT]=[0;CT]; 
+		let mut w:[i8;CT]=[0;CT];
 
 	//	self.affine();
 
 /* precompute table */
 		Q.copy(&self);
 		Q.dbl();
-		
+
 		W[0].copy(&self);
 
 		for i in 1..8 {
@@ -459,10 +460,10 @@ impl ECP2 {
 		for i in 0..nb {
 			w[i]=(t.lastbits(5)-16) as i8;
 			t.dec(w[i] as isize); t.norm();
-			t.fshr(4);	
+			t.fshr(4);
 		}
 		w[nb]=(t.lastbits(5)) as i8;
-		
+
 		P.copy(&W[((w[nb] as usize) -1)/2]);
 		for i in (0..nb).rev() {
 			Q.selector(&W,w[i] as i32);
@@ -481,7 +482,7 @@ impl ECP2 {
 /* P=u0.Q0+u1*Q1+u2*Q2+u3*Q3 */
 // Bos & Costello https://eprint.iacr.org/2013/458.pdf
 // Faz-Hernandez & Longa & Sanchez  https://eprint.iacr.org/2013/158.pdf
-// Side channel attack secure 
+// Side channel attack secure
 
 	pub fn mul4(Q: &mut [ECP2],u: &[BIG]) -> ECP2 {
 		let mut W=ECP2::new();
@@ -514,7 +515,7 @@ impl ECP2 {
 // Make it odd
 		let pb=1-t[0].parity();
 		t[0].inc(pb);
-		t[0].norm();	
+		t[0].norm();
 
 // Number of bits
 		mt.zero();
@@ -524,13 +525,13 @@ impl ECP2 {
 
 		let nb=1+mt.nbits();
 
-// Sign pivot 
+// Sign pivot
 
 		s[nb-1]=1;
 		for i in 0..nb-1 {
 			t[0].fshr(1);
 			s[i]=(2*t[0].parity()-1) as i8;
-			//println!("s={}",s[i]);	
+			//println!("s={}",s[i]);
 		}
 
 // Recoded exponent
@@ -545,7 +546,7 @@ impl ECP2 {
 				w[i]+=bt*(k as i8);
 				k=2*k;
 			}
-		}	
+		}
 
 // Main loop
 		P.selector(&T,(2*w[nb-1]+1) as i32);
@@ -554,12 +555,12 @@ impl ECP2 {
 			P.dbl();
 			W.selector(&T,(2*w[i]+s[i]) as i32);
 			P.add(&mut W);
-		}		
+		}
 
 // apply correction
-		W.copy(&P);   
+		W.copy(&P);
 		W.sub(&mut Q[0]);
-		P.cmove(&W,pb);	
+		P.cmove(&W,pb);
 		P.affine();
 
 		return P;
@@ -594,14 +595,14 @@ impl ECP2 {
 				T.neg();
 			}
         		let mut K=ECP2::new(); K.copy(&T);
-        		K.dbl(); K.add(&T); 
-    
+        		K.dbl(); K.add(&T);
+
         		K.frob(&X);
         		Q.frob(&X); Q.frob(&X); Q.frob(&X);
         		Q.add(&T); Q.add(&K);
         		T.frob(&X); T.frob(&X);
         		Q.add(&T);
-		}	
+		}
 		if ecp::CURVE_PAIRING_TYPE==ecp::BLS {
 
         	let mut xQ=Q.mul(&mut x);
@@ -622,7 +623,7 @@ impl ECP2 {
 
         	Q.add(&x2Q);
         	Q.add(&xQ);
-		}	
+		}
 
 		Q.affine();
 		return Q;
