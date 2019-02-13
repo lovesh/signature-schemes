@@ -40,6 +40,7 @@ impl AggregatePublicKey {
     /// Add a PublicKey to the AggregatePublicKey.
     pub fn add(&mut self, public_key: &PublicKey) {
         self.point.add(&public_key.point);
+        self.point.affine();
     }
 
     /// Instantiate an AggregatePublicKey from some serialized bytes.
@@ -85,6 +86,7 @@ impl AggregateSignature {
     /// Add a Signature to the AggregateSignature.
     pub fn add(&mut self, signature: &Signature) {
         self.point.add(&signature.point);
+        self.point.affine();
     }
 
     /// Verify this AggregateSignature against an AggregatePublicKey.
@@ -100,7 +102,8 @@ impl AggregateSignature {
         let mut key_point = avk.point.clone();
         sig_point.affine();
         key_point.affine();
-        let msg_hash_point = hash_on_g2(msg, d);
+        let mut msg_hash_point = hash_on_g2(msg, d);
+        msg_hash_point.affine();
         let mut lhs = ate_pairing(sig_point.as_raw(), &GeneratorG1);
         let mut rhs = ate_pairing(&msg_hash_point, &key_point.as_raw());
         lhs.equals(&mut rhs)
@@ -133,8 +136,10 @@ impl AggregateSignature {
 
             let mut key_point = key.point.clone();
             key_point.affine();
+            let mut hash_point = hash_on_g2(&msg[i * 32..(i + 1) * 32], d);
+            hash_point.affine();
             let pair = ate_pairing(
-                &hash_on_g2(&msg[i * 32..(i + 1) * 32], d),
+                &hash_point,
                 key_point.as_raw(),
             );
             if i == 0 {
@@ -172,6 +177,8 @@ impl Default for AggregateSignature {
 
 #[cfg(test)]
 mod tests {
+    extern crate hex;
+
     use super::super::keys::{Keypair, SecretKey};
     use super::*;
 
@@ -568,5 +575,24 @@ mod tests {
         // Message 2 is correct length but has not been signed correctly
         msg_1.pop();
         assert!(!aggregate_signature.verify_multiple(&msg_1, domain, &vec![apk_1, apk_2]));
+    }
+
+    #[test]
+    pub fn case06_aggregate_sigs() {
+        // TODO the signatures are encoded as 384 bit integers rather and (x,y)=(381 bits,381 bits) hence need to be decompressed
+        // TODO: add yaml reader to check all elements
+        // Test vector signatures
+        let sig1 = hex::decode("1351bdf582971f796bbaf6320e81251c9d28f674d720cca07ed14596b96697cf18238e0e03ebd7fc1353d885a39407e012cc74bc9f089ed9764bbceac5edba416bef5e73701288977b9cac1ccb6964269d4ebf78b4e8aa7792ba09d3e49c8e6a").unwrap();
+        let sig1 = Signature::from_bytes(&sig1).unwrap();
+        let sig2 = hex::decode("0c293ab7196ded8be31544ade7f733949db987b94ca8f7172b0c73b1f86459d8622d03ae6f8cd6285e4f785dba79639a02e45aea3554d02b97c0355756815469ee04e837cb841e02fde18cb3cc2924ace90e03c1e6b407981ab0ab38884cc22a").unwrap();
+        let sig2 = Signature::from_bytes(&sig2).unwrap();
+        let sig3 = hex::decode("8fc38adef9bc2d7407d0ac041d952efddaff5363f458b9d123e218172522e2bd82d9b7d65e6c1d8668607d1c5f8fe1da007727445a1baab6ad0d1d63b99f247f5fe12a08a0e98dac3acc7cd5cb8180ea699a8e525da9f9d7c14d1118dc011d28").unwrap();
+        let sig3 = Signature::from_bytes(&sig3).unwrap();
+
+        let mut aggregate_signature = AggregateSignature::new();
+        aggregate_signature.add(&sig1);
+        aggregate_signature.add(&sig2);
+        aggregate_signature.add(&sig3);
+        println!("{:?}", aggregate_signature.as_bytes());
     }
 }
