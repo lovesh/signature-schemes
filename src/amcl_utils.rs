@@ -23,8 +23,8 @@ pub type FP12 = bls381_FP12;
 pub const CURVE_ORDER: [Chunk; NLEN] = rom::CURVE_ORDER;
 pub const MODBYTES: usize = bls381_MODBYTES;
 
-// Byte size of element in group G1, 1 extra byte for compression
-pub const G1_BYTE_SIZE: usize = (2 * MODBYTES + 1) as usize;
+// Byte size of element in group G1
+pub const G1_BYTE_SIZE: usize = (2 * MODBYTES) as usize;
 // Byte size of element in group G2
 pub const G2_BYTE_SIZE: usize = (4 * MODBYTES) as usize;
 // Byte size of secret key
@@ -54,7 +54,7 @@ lazy_static! {
 
 // Take given message and domain and convert it to GroupG2 point
 pub fn hash_on_g2(msg: &[u8], d: u64) -> GroupG2 {
-    // Converting to BIG requires 48 bytes, Keccak256 is only 32 bytes
+    // Converting to BigNum requires 48 bytes, Keccak256 is only 32 bytes
     let mut x_real = vec![0 as u8; 16];
     x_real.append(&mut hash(&[msg, &d.to_be_bytes(), &[1]].concat()));
     let mut x_imaginary = vec![0 as u8; 16];
@@ -66,10 +66,10 @@ pub fn hash_on_g2(msg: &[u8], d: u64) -> GroupG2 {
 // Convert x real and imaginary parts to GroupG2 point
 #[allow(non_snake_case)]
 pub fn map_to_g2(x_real: &[u8], x_imaginary: &[u8]) -> GroupG2 {
-    // Convery Hashes to BIGs mod q
-    let q = BIG::new_ints(&rom::MODULUS);
-    let mut x_real = BIG::frombytes(x_real);
-    let mut x_imaginary = BIG::frombytes(x_imaginary);
+    // Convery Hashes to BigNums mod q
+    let q = BigNum::new_ints(&rom::MODULUS);
+    let mut x_real = BigNum::frombytes(x_real);
+    let mut x_imaginary = BigNum::frombytes(x_imaginary);
     x_real.rmod(&q);
     x_imaginary.rmod(&q);
     let mut x = FP2::new_bigs(&x_real, &x_imaginary);
@@ -108,13 +108,13 @@ pub fn cmp_fp2(num1:&mut FP2, num2:&mut FP2) -> isize {
     // First compare FP2.b
     let num1_b = num1.getb();
     let num2_b = num2.getb();
-    let mut result = BIG::comp(&num1_b, &num2_b);
+    let mut result = BigNum::comp(&num1_b, &num2_b);
 
     // If FP2.b is equal compare FP2.a
     if result == 0 {
         let num1_a = num1.geta();
         let num2_a = num2.geta();
-        result = BIG::comp(&num1_a, &num2_a);
+        result = BigNum::comp(&num1_a, &num2_a);
     }
     result
 }
@@ -125,10 +125,10 @@ pub fn multiply_cofactor(curve_point: &mut GroupG2) -> GroupG2 {
     let mut lowpart = GroupG2::new();
     lowpart.copy(&curve_point);
 
-    // Convert const arrays to BIGs
-    let g2_cofactor_high = BIG::new_ints(&G2_COFACTOR_HIGH);
-    let g2_cofactor_shift = BIG::new_ints(&G2_COFACTOR_SHIFT);
-    let g2_cofactor_low = BIG::new_ints(&G2_COFACTOR_LOW);
+    // Convert const arrays to BigNums
+    let g2_cofactor_high = BigNum::new_ints(&G2_COFACTOR_HIGH);
+    let g2_cofactor_shift = BigNum::new_ints(&G2_COFACTOR_SHIFT);
+    let g2_cofactor_low = BigNum::new_ints(&G2_COFACTOR_LOW);
 
     // Multiply high part, then low part, then add together
     let mut curve_point = curve_point.mul(&g2_cofactor_high);
@@ -163,21 +163,21 @@ pub fn compress_g1(g1: &mut GroupG1) -> Vec<u8> {
 
     // Check point at inifinity
     if g1.is_infinity() {
-        let mut result: Vec<u8> = vec![0; 48];
+        let mut result: Vec<u8> = vec![0; MODBYTES];
         // Set b_flag 1, all else 0
         result[0] += u8::pow(2,6);
     }
 
     // Convert point to array of bytes (x, y)
-    let mut g1_bytes: Vec<u8> = vec![0; 97];
+    let mut g1_bytes: Vec<u8> = vec![0; G1_BYTE_SIZE + 1];
     g1.tobytes(&mut g1_bytes, false);
 
     // Convert arrary (x, y) to compressed format
-    let mut result: Vec<u8> = vec![0; 48];
-    result.copy_from_slice(&g1_bytes[1..49]); // byte[0] is Milagro formatting
+    let mut result: Vec<u8> = vec![0; MODBYTES];
+    result.copy_from_slice(&g1_bytes[1..=MODBYTES]); // byte[0] is Milagro formatting
 
     // TODO: check flags (https://github.com/ethereum/eth2.0-tests/issues/20)
-    let flags: u8 = result[0] + u8::pow(2,7) * (g1_bytes[96] % 2);
+    let flags: u8 = result[0] + u8::pow(2,7) * (g1_bytes[G1_BYTE_SIZE] % 2);
     result[0] = flags;
 
     result
@@ -201,9 +201,9 @@ pub fn decompress_g1(g1_bytes: &[u8]) -> Result<GroupG1, DecodeError> {
     // TODO: Rearrange flags if required (https://github.com/ethereum/eth2.0-tests/issues/20)
     let a_flag: u8 = g1_bytes[0] / u8::pow(2, 7);
 
-    // Zero remaining flags so it can be converted to 381 bit BIG
+    // Zero remaining flags so it can be converted to 381 bit BigNum
     g1_bytes[0] %= u8::pow(2, 5);
-    let x_big = BIG::frombytes(&g1_bytes);
+    let x_big = BigNum::frombytes(&g1_bytes);
 
     // Convert to GroupG1 point using big and sign
     let point = GroupG1::new_bigint(&x_big, a_flag as isize);
@@ -225,22 +225,22 @@ pub fn compress_g2(g2: &mut GroupG2) -> Vec<u8> {
 
     // Check point at inifinity
     if g2.is_infinity() {
-        let mut result: Vec<u8> = vec![0; 96];
+        let mut result: Vec<u8> = vec![0; G2_BYTE_SIZE / 2];
         // Set b_flag 1, all else 0
         result[0] += u8::pow(2,6);
     }
 
     // Convert point to array of bytes (x, y)
-    let mut g2_bytes: Vec<u8> = vec![0; 192];
+    let mut g2_bytes: Vec<u8> = vec![0; G2_BYTE_SIZE];
     g2.tobytes(&mut g2_bytes);
 
     // Convert arrary (x, y) to compressed format
-    let mut result: Vec<u8> = vec![0; 96];
-    result.copy_from_slice(&g2_bytes[0..96]);
+    let mut result: Vec<u8> = vec![0; G2_BYTE_SIZE / 2];
+    result.copy_from_slice(&g2_bytes[0..(G2_BYTE_SIZE / 2)]);
 
     // TODO check flags (https://github.com/ethereum/eth2.0-tests/issues/20)
     // Add a_flag1 at 2^767 bit if g2.y.a is odd
-    let flags: u8 = result[0] + u8::pow(2,7) * (g2_bytes[143] % 2);
+    let flags: u8 = result[0] + u8::pow(2,7) * (g2_bytes[MODBYTES * 3 - 1] % 2);
     result[0] = flags;
 
     result
@@ -249,7 +249,7 @@ pub fn compress_g2(g2: &mut GroupG2) -> Vec<u8> {
 // Take a 384*2 bit array and convert to GroupG2 point (x, y)
 pub fn decompress_g2(g2_bytes: &[u8]) -> Result<GroupG2, DecodeError> {
     // Length must be 96 bytes
-    if g2_bytes.len() != MODBYTES * 2 {
+    if g2_bytes.len() != G2_BYTE_SIZE / 2 {
         return Err(DecodeError::IncorrectSize);
     }
 
@@ -263,12 +263,12 @@ pub fn decompress_g2(g2_bytes: &[u8]) -> Result<GroupG2, DecodeError> {
     // TODO: Rearrange flags if required (https://github.com/ethereum/eth2.0-tests/issues/20)
     let a_flag: u8 = g2_bytes[0] / u8::pow(2, 7); // Note: Modulus not needed for this flag
 
-    // Zero remaining flags so it can be converted to 381 bit BIG
+    // Zero remaining flags so it can be converted to 381 bit BigNum
     g2_bytes[0] %= u8::pow(2, 5);
 
     // Convert from array to FP2
-    let a = BIG::frombytes(&g2_bytes[0..48]);
-    let b = BIG::frombytes(&g2_bytes[48..]);
+    let a = BigNum::frombytes(&g2_bytes[0..MODBYTES]);
+    let b = BigNum::frombytes(&g2_bytes[MODBYTES..]);
     let x = FP2::new_bigs(&a, &b);
 
     // Convert to GroupG1 point using big and sign
@@ -459,11 +459,11 @@ mod tests {
             // Convert ouput to compressed bytes
             let output = test_case["output"].clone();
             let mut a = hex::decode(output[0].as_str().unwrap().trim_left_matches("0x")).unwrap();
-            while a.len() < 48 {
+            while a.len() < MOD_BYTE_SIZE {
                 a.insert(0,0);
             }
             let mut b = hex::decode(output[1].as_str().unwrap().trim_left_matches("0x")).unwrap();
-            while b.len() < 48 {
+            while b.len() < MOD_BYTE_SIZE {
                 b.insert(0,0);
             }
             a.append(&mut b);

@@ -1,7 +1,7 @@
 extern crate amcl;
 extern crate rand;
 
-use super::amcl_utils::{BigNum, GeneratorG1, GroupG1, CURVE_ORDER, MODBYTES, MOD_BYTE_SIZE};
+use super::amcl_utils::{BigNum, GeneratorG1, GroupG1, CURVE_ORDER, MOD_BYTE_SIZE};
 use super::errors::DecodeError;
 use super::g1::G1Point;
 use super::rng::get_seeded_rng;
@@ -34,7 +34,7 @@ impl SecretKey {
     /// Export the SecretKey to bytes.
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut temp = BigNum::new_copy(&self.x);
-        let mut bytes: [u8; MODBYTES] = [0; MODBYTES];
+        let mut bytes: [u8; MOD_BYTE_SIZE] = [0; MOD_BYTE_SIZE];
         temp.tobytes(&mut bytes);
         bytes.to_vec()
     }
@@ -84,7 +84,7 @@ impl PublicKey {
     }
 
     /// Export the PublicKey to some bytes.
-    pub fn as_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         self.point.as_bytes()
     }
 }
@@ -136,9 +136,9 @@ mod tests {
             237, 59, 140, 111,
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
-        let pk = PublicKey::from_secret_key(&sk);
+        let mut pk = PublicKey::from_secret_key(&sk);
         let decoded_pk = pk.as_bytes();
-        let encoded_pk = PublicKey::from_bytes(&decoded_pk).unwrap();
+        let mut encoded_pk = PublicKey::from_bytes(&decoded_pk).unwrap();
         let re_recoded_pk = encoded_pk.as_bytes();
         assert_eq!(decoded_pk, re_recoded_pk);
     }
@@ -151,7 +151,7 @@ mod tests {
             237, 59, 140, 111,
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
-        let pk = PublicKey::from_secret_key(&sk);
+        let mut pk = PublicKey::from_secret_key(&sk);
         let domain = 42;
 
         let message = "cats".as_bytes();

@@ -1,4 +1,4 @@
-use super::amcl_utils::{GroupG2, G2_BYTE_SIZE};
+use super::amcl_utils::{compress_g2, decompress_g2, GroupG2};
 use super::errors::DecodeError;
 use std::fmt;
 
@@ -37,30 +37,17 @@ impl G2Point {
         &self.point
     }
 
-    /// Instatiate the point from some bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
+    /// Instatiate the point from compressed bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        if bytes.len() != G2_BYTE_SIZE {
-            return Err(DecodeError::IncorrectSize);
-        }
+        let pt = decompress_g2(&bytes)?;
         Ok(Self {
-            point: GroupG2::frombytes(bytes),
+            point: pt,
         })
     }
 
-    /// Export (serialize) the point to bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
-    pub fn as_bytes(&self) -> Vec<u8> {
-        if self.is_infinity() {
-            return vec![0; G2_BYTE_SIZE];
-        };
-        let mut temp = GroupG2::new();
-        temp.copy(&self.point);
-        let mut bytes: [u8; G2_BYTE_SIZE] = [0; G2_BYTE_SIZE];
-        temp.tobytes(&mut bytes);
-        bytes.to_vec()
+    /// Export (serialize) the point to compressed bytes.
+    pub fn as_bytes(&mut self) -> Vec<u8> {
+        compress_g2(&mut self.point)
     }
 }
 
@@ -82,7 +69,9 @@ impl Clone for G2Point {
 
 impl PartialEq for G2Point {
     fn eq(&self, other: &G2Point) -> bool {
-        self.as_bytes() == other.as_bytes()
+        let mut clone_a = self.clone();
+        let mut clone_b = other.clone();
+        clone_a.as_bytes() == clone_b.as_bytes()
     }
 }
 

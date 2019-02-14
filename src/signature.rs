@@ -1,6 +1,6 @@
 extern crate amcl;
 
-use super::amcl_utils::{ate_pairing, hash_on_g2, map_to_g2, GeneratorG1, GroupG2};
+use super::amcl_utils::{ate_pairing, hash_on_g2, map_to_g2, GeneratorG1};
 use super::errors::DecodeError;
 use super::g2::G2Point;
 use super::keys::{PublicKey, SecretKey};
@@ -18,13 +18,6 @@ impl Signature {
         sig.affine();
         Self {
             point: G2Point::from_raw(sig),
-        }
-    }
-
-    /// Instantiate a new Signature from GroupG2 point.
-    pub fn new_from_raw(pt: GroupG2) -> Self {
-        Self {
-            point: G2Point::from_raw(pt),
         }
     }
 
@@ -58,7 +51,7 @@ impl Signature {
 
     /// Verify the Signature against a PublicKey, where the message has already been hashed.
     ///
-    /// The supplied hash will be mapped to G1.
+    /// The supplied hashes will be mapped to G2.
     ///
     /// In theory, should only return true if the PublicKey matches the SecretKey used to
     /// instantiate the Signature.
@@ -80,14 +73,14 @@ impl Signature {
         lhs.equals(&mut rhs)
     }
 
-    /// Instantiate a Signature from a serialized Signature.
+    /// Instantiate a Signature from compressed bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Signature, DecodeError> {
         let point = G2Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
-    /// Serialize the Signature.
-    pub fn as_bytes(&self) -> Vec<u8> {
+    /// Compress the Signature as bytes.
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         self.point.as_bytes()
     }
 }
@@ -99,7 +92,6 @@ mod tests {
 
     use super::super::keys::Keypair;
     use super::*;
-    use super::super::amcl_utils::{compress_g1, compress_g2, GroupG1, GroupG2};
     use self::yaml_rust::yaml;
     use std::{fs::File, io::prelude::*, path::PathBuf};
 
@@ -200,9 +192,8 @@ mod tests {
             let sk = SecretKey::from_bytes(&privkey).unwrap();
 
             // Create signature
-            let sig = Signature::new(&msg, domain, &sk);
-            let mut sig = sig.point.as_raw().clone();
-            let compressed_sig = compress_g2(&mut sig);
+            let mut sig = Signature::new(&msg, domain, &sk);
+            let compressed_sig = sig.as_bytes();
 
             // Convert given output to rust compressed signature (Vec<u8>)
             let output = test_case["output"].as_str().unwrap();

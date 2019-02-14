@@ -43,20 +43,14 @@ impl AggregatePublicKey {
         self.point.affine();
     }
 
-    /// Instantiate an AggregatePublicKey from some serialized bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
-    // See amcl_utils decompress_g2
+    /// Instantiate an AggregatePublicKey from compressed bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregatePublicKey, DecodeError> {
         let point = G1Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
-    /// Export the AggregatePublicKey to bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
-    // See amcl_utils compress_g2
-    pub fn as_bytes(&self) -> Vec<u8> {
+    /// Export the AggregatePublicKey to compressed bytes.
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         self.point.as_bytes()
     }
 }
@@ -156,17 +150,13 @@ impl AggregateSignature {
     }
 
     /// Instatiate an AggregateSignature from some bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregateSignature, DecodeError> {
         let point = G2Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
     /// Export (serialize) the AggregateSignature to bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
-    pub fn as_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         self.point.as_bytes()
     }
 }
@@ -182,7 +172,6 @@ mod tests {
     extern crate hex;
     extern crate yaml_rust;
 
-    use super::super::amcl_utils::{compress_g1, compress_g2, decompress_g1, decompress_g2};
     use super::super::keys::{Keypair, SecretKey};
     use super::*;
     use self::yaml_rust::yaml;
@@ -610,17 +599,15 @@ mod tests {
             for input in inputs {
                 let sig = input.as_str().unwrap().trim_left_matches("0x"); // String
                 let sig = hex::decode(sig).unwrap(); // Bytes
-                let sig = decompress_g2(&sig).unwrap(); // GroupG2 point
-                let sig = Signature::new_from_raw(sig); // Signature
+                let sig = Signature::from_bytes(&sig).unwrap(); // Signature
                 aggregate_sig.add(&sig);
             }
 
             // Verfiry aggregate signature matches output
             let output = test_case["output"].as_str().unwrap().trim_left_matches("0x"); // String
             let output = hex::decode(output).unwrap(); // Bytes
-            let aggregate_sig = compress_g2(&mut aggregate_sig.point.as_raw().clone());
 
-            assert_eq!(aggregate_sig, output);
+            assert_eq!(aggregate_sig.as_bytes(), output);
         }
     }
 
@@ -649,16 +636,14 @@ mod tests {
         for input in inputs {
             let pk = input.as_str().unwrap().trim_left_matches("0x"); // String
             let pk = hex::decode(pk).unwrap(); // Bytes
-            let pk = decompress_g1(&pk).unwrap(); // GroupG1 point
-            let pk = PublicKey::new_from_raw(&pk); // PublicKey
+            let pk = PublicKey::from_bytes(&pk).unwrap(); // PublicKey
             aggregate_pk.add(&pk);
         }
 
         // Verfiry AggregatePublicKey matches output
         let output = test_case["output"].as_str().unwrap().trim_left_matches("0x"); // String
         let output = hex::decode(output).unwrap(); // Bytes
-        let aggregate_pk = compress_g1(&mut aggregate_pk.point.as_raw().clone());
 
-        assert_eq!(aggregate_pk, output);
+        assert_eq!(aggregate_pk.as_bytes(), output);
     }
 }
