@@ -46,6 +46,7 @@ impl AggregatePublicKey {
     /// Instantiate an AggregatePublicKey from some serialized bytes.
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
+    // See amcl_utils decompress_g2
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregatePublicKey, DecodeError> {
         let point = G1Point::from_bytes(bytes)?;
         Ok(Self { point })
@@ -54,6 +55,7 @@ impl AggregatePublicKey {
     /// Export the AggregatePublicKey to bytes.
     ///
     /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
+    // See amcl_utils compress_g2
     pub fn as_bytes(&self) -> Vec<u8> {
         self.point.as_bytes()
     }
@@ -122,7 +124,7 @@ impl AggregateSignature {
         sig_point.affine();
 
         // Messages are 32 bytes and need a 1:1 ratio to AggregatePublicKeys
-        if msg.len() != 32 * avks.len() || avks.len() == 0 {
+        if msg.len() != 32 * avks.len() || avks.is_empty() {
             return false;
         }
 
@@ -178,10 +180,13 @@ impl Default for AggregateSignature {
 #[cfg(test)]
 mod tests {
     extern crate hex;
+    extern crate yaml_rust;
 
-    use super::super::amcl_utils::{compress_g1, compress_g2, decompress_g1, decompress_g2, GroupG1, GroupG2};
+    use super::super::amcl_utils::{compress_g1, compress_g2, decompress_g1, decompress_g2};
     use super::super::keys::{Keypair, SecretKey};
     use super::*;
+    use self::yaml_rust::yaml;
+    use std::{fs::File, io::prelude::*, path::PathBuf};
 
     #[test]
     fn test_aggregate_serialization() {
@@ -580,27 +585,80 @@ mod tests {
 
     #[test]
     pub fn case06_aggregate_sigs() {
-        // TODO: add yaml reader to check all elements
-        // Test vector signatures
-        let mut bytes = hex::decode("1351bdf582971f796bbaf6320e81251c9d28f674d720cca07ed14596b96697cf18238e0e03ebd7fc1353d885a39407e012cc74bc9f089ed9764bbceac5edba416bef5e73701288977b9cac1ccb6964269d4ebf78b4e8aa7792ba09d3e49c8e6a").unwrap();
-        let mut point = decompress_g2(&mut bytes).unwrap();
-        let mut sig1 = Signature::new_from_raw(point);
+        // Run tests from test_bls.yml
+        let mut file = {
+            let mut file_path_buf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            file_path_buf.push("src/test_vectors/test_bls.yml");
 
-        let mut bytes = hex::decode("0c293ab7196ded8be31544ade7f733949db987b94ca8f7172b0c73b1f86459d8622d03ae6f8cd6285e4f785dba79639a02e45aea3554d02b97c0355756815469ee04e837cb841e02fde18cb3cc2924ace90e03c1e6b407981ab0ab38884cc22a").unwrap();
-        let mut point = decompress_g2(&mut bytes).unwrap();
-        let mut sig2 = Signature::new_from_raw(point);
+            File::open(file_path_buf).unwrap()
+        };
+        let mut yaml_str = String::new();
+        file.read_to_string(&mut yaml_str).unwrap();
+        let docs = yaml::YamlLoader::load_from_str(&yaml_str).unwrap();
+        let doc = &docs[0];
 
-        let mut bytes = hex::decode("8fc38adef9bc2d7407d0ac041d952efddaff5363f458b9d123e218172522e2bd82d9b7d65e6c1d8668607d1c5f8fe1da007727445a1baab6ad0d1d63b99f247f5fe12a08a0e98dac3acc7cd5cb8180ea699a8e525da9f9d7c14d1118dc011d28").unwrap();
-        let mut point = decompress_g2(&mut bytes).unwrap();
-        let mut sig3 = Signature::new_from_raw(point);
+        // Select test case06
+        let test_cases = doc["case06_aggregate_sigs"].as_vec().unwrap();
 
+        // Verify input against output for each pair
+        for test_case in test_cases {
+            // Convert input to rust formats
+            let mut aggregate_sig = AggregateSignature::new();
+            let inputs = test_case["input"].clone();
 
-        let mut aggregate_signature = AggregateSignature::new();
-        aggregate_signature.add(&sig1);
-        aggregate_signature.add(&sig2);
-        aggregate_signature.add(&sig3);
+            // Add each input signature to the aggregate signature
+            for input in inputs {
+                let sig = input.as_str().unwrap().trim_left_matches("0x"); // String
+                let sig = hex::decode(sig).unwrap(); // Bytes
+                let sig = decompress_g2(&sig).unwrap(); // GroupG2 point
+                let sig = Signature::new_from_raw(sig); // Signature
+                aggregate_sig.add(&sig);
+            }
 
+            // Verfiry aggregate signature matches output
+            let output = test_case["output"].as_str().unwrap().trim_left_matches("0x"); // String
+            let output = hex::decode(output).unwrap(); // Bytes
+            let aggregate_sig = compress_g2(&mut aggregate_sig.point.as_raw().clone());
 
-        println!("{:?}", aggregate_signature.as_bytes());
+            assert_eq!(aggregate_sig, output);
+        }
+    }
+
+    #[test]
+    pub fn case07_aggregate_pubkeys() {
+        // Run tests from test_bls.yml
+        let mut file = {
+            let mut file_path_buf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            file_path_buf.push("src/test_vectors/test_bls.yml");
+
+            File::open(file_path_buf).unwrap()
+        };
+        let mut yaml_str = String::new();
+        file.read_to_string(&mut yaml_str).unwrap();
+        let docs = yaml::YamlLoader::load_from_str(&yaml_str).unwrap();
+        let doc = &docs[0];
+
+        // Select test case07
+        let test_case = doc["case07_aggregate_pubkeys"].clone();
+
+        // Convert input to rust formats
+        let mut aggregate_pk = AggregatePublicKey::new();
+        let inputs = test_case["input"].clone();
+
+        // Add each input PublicKey to AggregatePublicKey
+        for input in inputs {
+            let pk = input.as_str().unwrap().trim_left_matches("0x"); // String
+            let pk = hex::decode(pk).unwrap(); // Bytes
+            let pk = decompress_g1(&pk).unwrap(); // GroupG1 point
+            let pk = PublicKey::new_from_raw(&pk); // PublicKey
+            aggregate_pk.add(&pk);
+        }
+
+        // Verfiry AggregatePublicKey matches output
+        let output = test_case["output"].as_str().unwrap().trim_left_matches("0x"); // String
+        let output = hex::decode(output).unwrap(); // Bytes
+        let aggregate_pk = compress_g1(&mut aggregate_pk.point.as_raw().clone());
+
+        assert_eq!(aggregate_pk, output);
     }
 }

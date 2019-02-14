@@ -32,19 +32,19 @@ pub const MOD_BYTE_SIZE: usize = bls381_MODBYTES;
 
 // G2_Cofactor as arrays of i64
 pub const G2_COFACTOR_HIGH: [Chunk; NLEN] = [
-  0x01537E293A6691AE, 0x023C72D367A0BBC8, 0x0205B2E5A7DDFA62,
-  0x01151C216AEA9A28, 0x012876A202CD91DE, 0x010539FC4247541E,
-  0x000000005D543A95
+  0x0153_7E29_3A66_91AE, 0x023C_72D3_67A0_BBC8, 0x0205_B2E5_A7DD_FA62,
+  0x0115_1C21_6AEA_9A28, 0x0128_76A2_02CD_91DE, 0x0105_39FC_4247_541E,
+  0x0000_0000_5D54_3A95
 ];
 pub const G2_COFACTOR_LOW: [Chunk; NLEN] = [
-  0x031C38E31C7238E5, 0x01BB1B9E1BC31C33, 0x0000000000000161,
-  0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
-  0x0000000000000000
+  0x031C_38E3_1C72_38E5, 0x01BB_1B9E_1BC3_1C33, 0x0000_0000_0000_0161,
+  0x0000_0000_0000_0000, 0x0000_0000_0000_0000, 0x0000_0000_0000_0000,
+  0x0000_0000_0000_0000
 ];
 pub const G2_COFACTOR_SHIFT: [Chunk; NLEN] = [
-  0x0000000000000000, 0x0000000000000000, 0x0000000000001000,
-  0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
-  0x0000000000000000
+  0x0000_0000_0000_0000, 0x0000_0000_0000_0000, 0x0000_0000_0000_1000,
+  0x0000_0000_0000_0000, 0x0000_0000_0000_0000, 0x0000_0000_0000_0000,
+  0x0000_0000_0000_0000
 ];
 
 lazy_static! {
@@ -79,7 +79,7 @@ pub fn map_to_g2(x_real: &[u8], x_imaginary: &[u8]) -> GroupG2 {
 
     let mut curve_point: GroupG2;
 
-    // Continue increment x until valid y is found
+    // Continue to increment x until valid y is found
     loop {
         x.norm();
         curve_point = GroupG2::new_fp2(&x);
@@ -91,17 +91,15 @@ pub fn map_to_g2(x_real: &[u8], x_imaginary: &[u8]) -> GroupG2 {
     }
 
     // Take larger of two y values
-    let mut y = curve_point.gety();
-    let mut neg_y = curve_point.gety();
+    let mut y = curve_point.getpy(); // makes a copy
+    let mut neg_y = curve_point.getpy();
     neg_y.neg();
     if cmp_fp2(&mut y, &mut neg_y) < 0 {
         curve_point.neg();
     }
 
     // Multiply the point by given G2_Cofactor
-    let curve_point = multiply_cofactor(&mut curve_point);
-
-    curve_point
+    multiply_cofactor(&mut curve_point)
 }
 
 // Compare values of two FP2 elements,
@@ -135,8 +133,8 @@ pub fn multiply_cofactor(curve_point: &mut GroupG2) -> GroupG2 {
     // Multiply high part, then low part, then add together
     let mut curve_point = curve_point.mul(&g2_cofactor_high);
     curve_point = curve_point.mul(&g2_cofactor_shift);
-    let mut lowpart = lowpart.mul(&g2_cofactor_low);
-    curve_point.add(&mut lowpart);
+    let lowpart = lowpart.mul(&g2_cofactor_low);
+    curve_point.add(&lowpart);
     curve_point
 }
 
@@ -167,7 +165,7 @@ pub fn compress_g1(g1: &mut GroupG1) -> Vec<u8> {
     if g1.is_infinity() {
         let mut result: Vec<u8> = vec![0; 48];
         // Set b_flag 1, all else 0
-        result[0] = result[0] + u8::pow(2,6);
+        result[0] += u8::pow(2,6);
     }
 
     // Convert point to array of bytes (x, y)
@@ -186,7 +184,7 @@ pub fn compress_g1(g1: &mut GroupG1) -> Vec<u8> {
 }
 
 // Take a 384 bit array and convert to GroupG1 point (x, y)
-pub fn decompress_g1(g1_bytes: &Vec<u8>) -> Result<GroupG1, DecodeError> {
+pub fn decompress_g1(g1_bytes: &[u8]) -> Result<GroupG1, DecodeError> {
 
     // Length must be 48 bytes
     if g1_bytes.len() != MODBYTES {
@@ -199,12 +197,12 @@ pub fn decompress_g1(g1_bytes: &Vec<u8>) -> Result<GroupG1, DecodeError> {
         return Err(DecodeError::Infinity);
     }
 
-    let mut g1_bytes = g1_bytes.clone();
+    let mut g1_bytes = g1_bytes.to_owned();
     // TODO: Rearrange flags if required (https://github.com/ethereum/eth2.0-tests/issues/20)
-    let a_flag: u8 = g1_bytes[0] / u8::pow(2, 7); //Note: Modulus not needed for this flag
+    let a_flag: u8 = g1_bytes[0] / u8::pow(2, 7);
 
     // Zero remaining flags so it can be converted to 381 bit BIG
-    g1_bytes[0] = g1_bytes[0] % u8::pow(2, 5);
+    g1_bytes[0] %= u8::pow(2, 5);
     let x_big = BIG::frombytes(&g1_bytes);
 
     // Convert to GroupG1 point using big and sign
@@ -229,7 +227,7 @@ pub fn compress_g2(g2: &mut GroupG2) -> Vec<u8> {
     if g2.is_infinity() {
         let mut result: Vec<u8> = vec![0; 96];
         // Set b_flag 1, all else 0
-        result[0] = result[0] + u8::pow(2,6);
+        result[0] += u8::pow(2,6);
     }
 
     // Convert point to array of bytes (x, y)
@@ -249,7 +247,7 @@ pub fn compress_g2(g2: &mut GroupG2) -> Vec<u8> {
 }
 
 // Take a 384*2 bit array and convert to GroupG2 point (x, y)
-pub fn decompress_g2(g2_bytes: &Vec<u8>) -> Result<GroupG2, DecodeError> {
+pub fn decompress_g2(g2_bytes: &[u8]) -> Result<GroupG2, DecodeError> {
     // Length must be 96 bytes
     if g2_bytes.len() != MODBYTES * 2 {
         return Err(DecodeError::IncorrectSize);
@@ -261,12 +259,12 @@ pub fn decompress_g2(g2_bytes: &Vec<u8>) -> Result<GroupG2, DecodeError> {
         return Err(DecodeError::Infinity);
     }
 
-    let mut g2_bytes = g2_bytes.clone();
+    let mut g2_bytes = g2_bytes.to_owned();
     // TODO: Rearrange flags if required (https://github.com/ethereum/eth2.0-tests/issues/20)
     let a_flag: u8 = g2_bytes[0] / u8::pow(2, 7); // Note: Modulus not needed for this flag
 
     // Zero remaining flags so it can be converted to 381 bit BIG
-    g2_bytes[0] = g2_bytes[0] % u8::pow(2, 5);
+    g2_bytes[0] %= u8::pow(2, 5);
 
     // Convert from array to FP2
     let a = BIG::frombytes(&g2_bytes[0..48]);
@@ -355,7 +353,10 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn case01_message_hash_G2_uncompressed() {
-        // TODO: fails due to reading values reduces them?
+        // This test fails as the intermediate (x,y,z) variables do not match test vector
+        // Likely caused by calling affine() during an intermediate step which converts (x, y, z) -> (x, y)
+        // Note: if we convert to an (x, y) point the result is correct so overall function works
+
         // Run tests from test_bls.yml
         let mut file = {
             let mut file_path_buf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -401,11 +402,20 @@ mod tests {
                     result_fp2 = result.getpz();
                 }
 
-                let a = fp2[0].as_str().unwrap().trim_left_matches("0x");
-                let b = fp2[1].as_str().unwrap().trim_left_matches("0x");
+                // Convert output (a, b) to bytes
+                let output_a = fp2[0].as_str().unwrap().trim_left_matches("0x");
+                let output_a = hex::decode(output_a).unwrap();
+                let output_b = fp2[1].as_str().unwrap().trim_left_matches("0x");
+                let output_b = hex::decode(output_b).unwrap();
 
-                assert_eq!(a.to_uppercase().as_str(), result_fp2.geta().tostring());
-                assert_eq!(b.to_uppercase().as_str(), result_fp2.getb().tostring());
+                // Convert the result (a,b) to bytes
+                let mut result_a = vec![0;48];
+                let mut result_b = vec![0;48];
+                result_fp2.geta().tobytes(&mut result_a);
+                result_fp2.getb().tobytes(&mut result_b);
+
+                assert_eq!(output_a, result_a);
+                assert_eq!(output_b, result_b);
             }
         }
     }

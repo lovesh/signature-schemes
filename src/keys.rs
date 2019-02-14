@@ -1,7 +1,7 @@
 extern crate amcl;
 extern crate rand;
 
-use super::amcl_utils::{BigNum, GeneratorG1, CURVE_ORDER, MODBYTES, MOD_BYTE_SIZE};
+use super::amcl_utils::{BigNum, GeneratorG1, GroupG1, CURVE_ORDER, MODBYTES, MOD_BYTE_SIZE};
 use super::errors::DecodeError;
 use super::g1::G1Point;
 use super::rng::get_seeded_rng;
@@ -70,6 +70,13 @@ impl PublicKey {
         }
     }
 
+    /// Instantiate a PublicKey from some GroupG1 point.
+    pub fn new_from_raw(pt: &GroupG1) -> Self {
+        PublicKey {
+            point: G1Point::from_raw(*pt),
+        }
+    }
+
     /// Instantiate a PublicKey from some bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, DecodeError> {
         let point = G1Point::from_bytes(bytes)?;
@@ -101,9 +108,13 @@ impl Keypair {
 #[cfg(test)]
 mod tests {
     extern crate hex;
+    extern crate yaml_rust;
 
+    use super::super::amcl_utils::compress_g1;
     use super::super::signature::Signature;
     use super::*;
+    use self::yaml_rust::yaml;
+    use std::{fs::File, io::prelude::*, path::PathBuf};
 
     #[test]
     fn test_secret_key_serialization_isomorphism() {
@@ -167,22 +178,44 @@ mod tests {
     // case03_private_to_public_key
     #[test]
     fn case03_private_to_public_key() {
-        let secret: Vec<u8> = hex::decode("00000000000000000000000000000000263dbd792f5b1be47ed85f8938c0f29586af0d3ac7b977f21c278fe1462040e3").unwrap();
-        let sk = SecretKey::from_bytes(&secret).unwrap();
-        let pk = PublicKey::from_secret_key(&sk).as_bytes();
-        let pk_from_test: Vec<u8> = hex::decode("0491d1b0ecd9bb917989f0e74f0dea0422eac4a873e5e2644f368dffb9a6e20fd6e10c1b77654d067c0618f6e5a7f79a").unwrap();
-        assert_eq!(&pk[1..49], pk_from_test.as_slice());
+        // Run tests from test_bls.yml
+        let mut file = {
+            let mut file_path_buf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            file_path_buf.push("src/test_vectors/test_bls.yml");
 
-        let secret: Vec<u8> = hex::decode("0000000000000000000000000000000047b8192d77bf871b62e87859d653922725724a5c031afeabc60bcef5ff665138").unwrap();
-        let sk = SecretKey::from_bytes(&secret).unwrap();
-        let pk = PublicKey::from_secret_key(&sk).as_bytes();
-        let pk_from_test: Vec<u8> = hex::decode("1301803f8b5ac4a1133581fc676dfedc60d891dd5fa99028805e5ea5b08d3491af75d0707adab3b70c6a6a580217bf81").unwrap();
-        assert_eq!(&pk[1..49], pk_from_test.as_slice());
+            File::open(file_path_buf).unwrap()
+        };
+        let mut yaml_str = String::new();
+        file.read_to_string(&mut yaml_str).unwrap();
+        let docs = yaml::YamlLoader::load_from_str(&yaml_str).unwrap();
+        let doc = &docs[0];
 
-        let secret: Vec<u8> = hex::decode("00000000000000000000000000000000328388aff0d4a5b7dc9205abd374e7e98f3cd9f3418edb4eafda5fb16473d216").unwrap();
-        let sk = SecretKey::from_bytes(&secret).unwrap();
-        let pk = PublicKey::from_secret_key(&sk).as_bytes();
-        let pk_from_test: Vec<u8> = hex::decode("153d21a4cfd562c469cc81514d4ce5a6b577d8403d32a394dc265dd190b47fa9f829fdd7963afdf972e5e77854051f6f").unwrap();
-        assert_eq!(&pk[1..49], pk_from_test.as_slice());
+        // Select test case03
+        let test_cases = doc["case03_private_to_public_key"].as_vec().unwrap();
+
+        // Verify input against output for each pair
+        for test_case in test_cases {
+            // Convert input to rust formats
+            let input = test_case["input"].as_str().unwrap();
+            // Convert privateKey from yaml to SecretKey
+            let privkey = input.trim_left_matches("0x");
+            let mut privkey = hex::decode(privkey).unwrap();
+            while privkey.len() < 48 {
+                // Prepend until correct length
+                privkey.insert(0, 0);
+            }
+            let sk = SecretKey::from_bytes(&privkey).unwrap();
+
+            // Create public key from private key and compress
+            let mut pk = PublicKey::from_secret_key(&sk);
+            let pk = compress_g1(&mut pk.point.as_raw().clone());
+
+            // Convert given output to rust PublicKey
+            let output = test_case["output"].as_str().unwrap();
+            let output = output.trim_left_matches("0x");
+            let output = hex::decode(output).unwrap();
+
+            assert_eq!(output, pk);
+        }
     }
 }
