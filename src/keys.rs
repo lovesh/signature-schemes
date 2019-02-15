@@ -84,8 +84,9 @@ impl PublicKey {
     }
 
     /// Export the PublicKey to some bytes.
-    pub fn as_bytes(&mut self) -> Vec<u8> {
-        self.point.as_bytes()
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let mut clone = self.point.clone();
+        clone.as_bytes()
     }
 }
 
@@ -136,9 +137,9 @@ mod tests {
             237, 59, 140, 111,
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
-        let mut pk = PublicKey::from_secret_key(&sk);
+        let pk = PublicKey::from_secret_key(&sk);
         let decoded_pk = pk.as_bytes();
-        let mut encoded_pk = PublicKey::from_bytes(&decoded_pk).unwrap();
+        let encoded_pk = PublicKey::from_bytes(&decoded_pk).unwrap();
         let re_recoded_pk = encoded_pk.as_bytes();
         assert_eq!(decoded_pk, re_recoded_pk);
     }
@@ -151,7 +152,7 @@ mod tests {
             237, 59, 140, 111,
         ];
         let sk = SecretKey::from_bytes(&sk_bytes).unwrap();
-        let mut pk = PublicKey::from_secret_key(&sk);
+        let pk = PublicKey::from_secret_key(&sk);
         let domain = 42;
 
         let message = "cats".as_bytes();
@@ -207,7 +208,7 @@ mod tests {
             let sk = SecretKey::from_bytes(&privkey).unwrap();
 
             // Create public key from private key and compress
-            let mut pk = PublicKey::from_secret_key(&sk);
+            let pk = PublicKey::from_secret_key(&sk);
             let pk = compress_g1(&mut pk.point.as_raw().clone());
 
             // Convert given output to rust PublicKey
