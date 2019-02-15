@@ -14,7 +14,8 @@ impl Signature {
     /// Instantiate a new Signature from a message and a SecretKey.
     pub fn new(msg: &[u8], d: u64, sk: &SecretKey) -> Self {
         let hash_point = hash_on_g2(msg, d);
-        let sig = hash_point.mul(&sk.x);
+        let mut sig = hash_point.mul(&sk.x);
+        sig.affine();
         Self {
             point: G2Point::from_raw(sig),
         }
@@ -24,7 +25,8 @@ impl Signature {
     /// been hashed.
     pub fn new_hashed(msg_hash_real: &[u8], msg_hash_imaginary: &[u8], sk: &SecretKey) -> Self {
         let hash_point = map_to_g2(msg_hash_real, msg_hash_imaginary);
-        let sig = hash_point.mul(&sk.x);
+        let mut sig = hash_point.mul(&sk.x);
+        sig.affine();
         Self {
             point: G2Point::from_raw(sig),
         }
@@ -40,7 +42,8 @@ impl Signature {
             return false;
         }
 
-        let msg_hash_point = hash_on_g2(msg, d);
+        let mut msg_hash_point = hash_on_g2(msg, d);
+        msg_hash_point.affine();
         let mut lhs = ate_pairing(self.point.as_raw(), &GeneratorG1);
         let mut rhs = ate_pairing(&msg_hash_point, &pk.point.as_raw());
         lhs.equals(&mut rhs)
@@ -48,7 +51,7 @@ impl Signature {
 
     /// Verify the Signature against a PublicKey, where the message has already been hashed.
     ///
-    /// The supplied hash will be mapped to G1.
+    /// The supplied hashes will be mapped to G2.
     ///
     /// In theory, should only return true if the PublicKey matches the SecretKey used to
     /// instantiate the Signature.
@@ -63,28 +66,34 @@ impl Signature {
             return false;
         }
 
-        let msg_hash_point = map_to_g2(msg_hash_real, msg_hash_imaginary);
+        let mut msg_hash_point = map_to_g2(msg_hash_real, msg_hash_imaginary);
+        msg_hash_point.affine();
         let mut lhs = ate_pairing(self.point.as_raw(), &GeneratorG1);
         let mut rhs = ate_pairing(&msg_hash_point, &pk.point.as_raw());
         lhs.equals(&mut rhs)
     }
 
-    /// Instantiate a Signature from a serialized Signature.
+    /// Instantiate a Signature from compressed bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Signature, DecodeError> {
         let point = G2Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
-    /// Serialize the Signature.
-    pub fn as_bytes(&self) -> Vec<u8> {
+    /// Compress the Signature as bytes.
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         self.point.as_bytes()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    extern crate hex;
+    extern crate yaml_rust;
+
     use super::super::keys::Keypair;
     use super::*;
+    use self::yaml_rust::yaml;
+    use std::{fs::File, io::prelude::*, path::PathBuf};
 
     #[test]
     fn basic_sign_verify() {
@@ -139,5 +148,59 @@ mod tests {
         let sig = Signature::new(&msg.as_bytes(), domain, &sk);
         domain = 11;
         assert_eq!(sig.verify(&msg.as_bytes(), domain, &vk), false);
+    }
+
+    #[test]
+    fn case04_sign_messages() {
+        // Run tests from test_bls.yml
+        let mut file = {
+            let mut file_path_buf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            file_path_buf.push("src/test_vectors/test_bls.yml");
+
+            File::open(file_path_buf).unwrap()
+        };
+        let mut yaml_str = String::new();
+        file.read_to_string(&mut yaml_str).unwrap();
+        let docs = yaml::YamlLoader::load_from_str(&yaml_str).unwrap();
+        let doc = &docs[0];
+
+        // Select test case04
+        let test_cases = doc["case04_sign_messages"].as_vec().unwrap();
+
+        // Verify input against output for each pair
+        for test_case in test_cases {
+            // Convert input to rust formats
+            let input = test_case["input"].clone();
+            // Convert domain from yaml to u64
+            let domain = input["domain"].as_str().unwrap();
+            let domain = domain.trim_left_matches("0x");
+            let domain = u64::from_str_radix(domain, 16).unwrap();
+
+            // Convert msg from yaml to bytes (Vec<u8>)
+            let msg = input["message"].as_str().unwrap();
+            let msg = msg.trim_left_matches("0x");
+            let msg = hex::decode(msg).unwrap();
+
+            // Convert privateKey from yaml to SecretKey
+            let privkey = input["privkey"].as_str().unwrap();
+            let privkey = privkey.trim_left_matches("0x");
+            let mut privkey = hex::decode(privkey).unwrap();
+            while privkey.len() < 48 {
+                // Prepend until correct length
+                privkey.insert(0, 0);
+            }
+            let sk = SecretKey::from_bytes(&privkey).unwrap();
+
+            // Create signature
+            let mut sig = Signature::new(&msg, domain, &sk);
+            let compressed_sig = sig.as_bytes();
+
+            // Convert given output to rust compressed signature (Vec<u8>)
+            let output = test_case["output"].as_str().unwrap();
+            let output = output.trim_left_matches("0x");
+            let output = hex::decode(output).unwrap();
+
+            assert_eq!(output, compressed_sig);
+        }
     }
 }

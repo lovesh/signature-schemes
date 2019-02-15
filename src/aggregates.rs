@@ -40,20 +40,17 @@ impl AggregatePublicKey {
     /// Add a PublicKey to the AggregatePublicKey.
     pub fn add(&mut self, public_key: &PublicKey) {
         self.point.add(&public_key.point);
+        self.point.affine();
     }
 
-    /// Instantiate an AggregatePublicKey from some serialized bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
+    /// Instantiate an AggregatePublicKey from compressed bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregatePublicKey, DecodeError> {
         let point = G1Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
-    /// Export the AggregatePublicKey to bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
-    pub fn as_bytes(&self) -> Vec<u8> {
+    /// Export the AggregatePublicKey to compressed bytes.
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         self.point.as_bytes()
     }
 }
@@ -85,6 +82,7 @@ impl AggregateSignature {
     /// Add a Signature to the AggregateSignature.
     pub fn add(&mut self, signature: &Signature) {
         self.point.add(&signature.point);
+        self.point.affine();
     }
 
     /// Verify this AggregateSignature against an AggregatePublicKey.
@@ -100,7 +98,8 @@ impl AggregateSignature {
         let mut key_point = avk.point.clone();
         sig_point.affine();
         key_point.affine();
-        let msg_hash_point = hash_on_g2(msg, d);
+        let mut msg_hash_point = hash_on_g2(msg, d);
+        msg_hash_point.affine();
         let mut lhs = ate_pairing(sig_point.as_raw(), &GeneratorG1);
         let mut rhs = ate_pairing(&msg_hash_point, &key_point.as_raw());
         lhs.equals(&mut rhs)
@@ -119,7 +118,7 @@ impl AggregateSignature {
         sig_point.affine();
 
         // Messages are 32 bytes and need a 1:1 ratio to AggregatePublicKeys
-        if msg.len() != 32 * avks.len() || avks.len() == 0 {
+        if msg.len() != 32 * avks.len() || avks.is_empty() {
             return false;
         }
 
@@ -133,8 +132,10 @@ impl AggregateSignature {
 
             let mut key_point = key.point.clone();
             key_point.affine();
+            let mut hash_point = hash_on_g2(&msg[i * 32..(i + 1) * 32], d);
+            hash_point.affine();
             let pair = ate_pairing(
-                &hash_on_g2(&msg[i * 32..(i + 1) * 32], d),
+                &hash_point,
                 key_point.as_raw(),
             );
             if i == 0 {
@@ -149,17 +150,13 @@ impl AggregateSignature {
     }
 
     /// Instatiate an AggregateSignature from some bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
     pub fn from_bytes(bytes: &[u8]) -> Result<AggregateSignature, DecodeError> {
         let point = G2Point::from_bytes(bytes)?;
         Ok(Self { point })
     }
 
     /// Export (serialize) the AggregateSignature to bytes.
-    ///
-    /// TODO: detail the exact format of these bytes (e.g., compressed, etc).
-    pub fn as_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         self.point.as_bytes()
     }
 }
@@ -172,8 +169,13 @@ impl Default for AggregateSignature {
 
 #[cfg(test)]
 mod tests {
+    extern crate hex;
+    extern crate yaml_rust;
+
     use super::super::keys::{Keypair, SecretKey};
     use super::*;
+    use self::yaml_rust::yaml;
+    use std::{fs::File, io::prelude::*, path::PathBuf};
 
     #[test]
     fn test_aggregate_serialization() {
@@ -568,5 +570,80 @@ mod tests {
         // Message 2 is correct length but has not been signed correctly
         msg_1.pop();
         assert!(!aggregate_signature.verify_multiple(&msg_1, domain, &vec![apk_1, apk_2]));
+    }
+
+    #[test]
+    pub fn case06_aggregate_sigs() {
+        // Run tests from test_bls.yml
+        let mut file = {
+            let mut file_path_buf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            file_path_buf.push("src/test_vectors/test_bls.yml");
+
+            File::open(file_path_buf).unwrap()
+        };
+        let mut yaml_str = String::new();
+        file.read_to_string(&mut yaml_str).unwrap();
+        let docs = yaml::YamlLoader::load_from_str(&yaml_str).unwrap();
+        let doc = &docs[0];
+
+        // Select test case06
+        let test_cases = doc["case06_aggregate_sigs"].as_vec().unwrap();
+
+        // Verify input against output for each pair
+        for test_case in test_cases {
+            // Convert input to rust formats
+            let mut aggregate_sig = AggregateSignature::new();
+            let inputs = test_case["input"].clone();
+
+            // Add each input signature to the aggregate signature
+            for input in inputs {
+                let sig = input.as_str().unwrap().trim_left_matches("0x"); // String
+                let sig = hex::decode(sig).unwrap(); // Bytes
+                let sig = Signature::from_bytes(&sig).unwrap(); // Signature
+                aggregate_sig.add(&sig);
+            }
+
+            // Verfiry aggregate signature matches output
+            let output = test_case["output"].as_str().unwrap().trim_left_matches("0x"); // String
+            let output = hex::decode(output).unwrap(); // Bytes
+
+            assert_eq!(aggregate_sig.as_bytes(), output);
+        }
+    }
+
+    #[test]
+    pub fn case07_aggregate_pubkeys() {
+        // Run tests from test_bls.yml
+        let mut file = {
+            let mut file_path_buf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            file_path_buf.push("src/test_vectors/test_bls.yml");
+
+            File::open(file_path_buf).unwrap()
+        };
+        let mut yaml_str = String::new();
+        file.read_to_string(&mut yaml_str).unwrap();
+        let docs = yaml::YamlLoader::load_from_str(&yaml_str).unwrap();
+        let doc = &docs[0];
+
+        // Select test case07
+        let test_case = doc["case07_aggregate_pubkeys"].clone();
+
+        // Convert input to rust formats
+        let mut aggregate_pk = AggregatePublicKey::new();
+        let inputs = test_case["input"].clone();
+
+        // Add each input PublicKey to AggregatePublicKey
+        for input in inputs {
+            let pk = input.as_str().unwrap().trim_left_matches("0x"); // String
+            let pk = hex::decode(pk).unwrap(); // Bytes
+            let pk = PublicKey::from_bytes(&pk).unwrap(); // PublicKey
+            aggregate_pk.add(&pk);
+        }
+
+        // Verfiry AggregatePublicKey matches output
+        let output = test_case["output"].as_str().unwrap().trim_left_matches("0x"); // String
+        let output = hex::decode(output).unwrap(); // Bytes
+
+        assert_eq!(aggregate_pk.as_bytes(), output);
     }
 }
