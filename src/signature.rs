@@ -91,9 +91,9 @@ mod tests {
     extern crate hex;
     extern crate yaml_rust;
 
+    use self::yaml_rust::yaml;
     use super::super::keys::Keypair;
     use super::*;
-    use self::yaml_rust::yaml;
     use std::{fs::File, io::prelude::*, path::PathBuf};
 
     #[test]

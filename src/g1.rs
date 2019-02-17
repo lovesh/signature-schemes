@@ -40,9 +40,7 @@ impl G1Point {
     /// Instatiate the G1 point from compressed bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         let pt = decompress_g1(&bytes)?;
-        Ok(Self {
-            point: pt,
-        })
+        Ok(Self { point: pt })
     }
 
     /// Export (serialize) the G1 point to compressed bytes.

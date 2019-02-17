@@ -111,10 +111,10 @@ mod tests {
     extern crate hex;
     extern crate yaml_rust;
 
+    use self::yaml_rust::yaml;
     use super::super::amcl_utils::compress_g1;
     use super::super::signature::Signature;
     use super::*;
-    use self::yaml_rust::yaml;
     use std::{fs::File, io::prelude::*, path::PathBuf};
 
     #[test]
