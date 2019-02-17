@@ -1,6 +1,6 @@
-extern crate hex;
-extern crate criterion;
 extern crate bls_aggregates;
+extern crate criterion;
+extern crate hex;
 
 use bls_aggregates::{AggregatePublicKey, AggregateSignature, Signature, Keypair};
 use criterion::{Benchmark, Criterion, criterion_group, criterion_main};

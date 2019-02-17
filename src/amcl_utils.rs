@@ -32,18 +32,30 @@ pub const MOD_BYTE_SIZE: usize = bls381_MODBYTES;
 
 // G2_Cofactor as arrays of i64
 pub const G2_COFACTOR_HIGH: [Chunk; NLEN] = [
-  0x0153_7E29_3A66_91AE, 0x023C_72D3_67A0_BBC8, 0x0205_B2E5_A7DD_FA62,
-  0x0115_1C21_6AEA_9A28, 0x0128_76A2_02CD_91DE, 0x0105_39FC_4247_541E,
+  0x0153_7E29_3A66_91AE,
+  0x023C_72D3_67A0_BBC8,
+  0x0205_B2E5_A7DD_FA62,
+  0x0115_1C21_6AEA_9A28,
+  0x0128_76A2_02CD_91DE,
+  0x0105_39FC_4247_541E,
   0x0000_0000_5D54_3A95
 ];
 pub const G2_COFACTOR_LOW: [Chunk; NLEN] = [
-  0x031C_38E3_1C72_38E5, 0x01BB_1B9E_1BC3_1C33, 0x0000_0000_0000_0161,
-  0x0000_0000_0000_0000, 0x0000_0000_0000_0000, 0x0000_0000_0000_0000,
+  0x031C_38E3_1C72_38E5,
+  0x01BB_1B9E_1BC3_1C33,
+  0x0000_0000_0000_0161,
+  0x0000_0000_0000_0000,
+  0x0000_0000_0000_0000,
+  0x0000_0000_0000_0000,
   0x0000_0000_0000_0000
 ];
 pub const G2_COFACTOR_SHIFT: [Chunk; NLEN] = [
-  0x0000_0000_0000_0000, 0x0000_0000_0000_0000, 0x0000_0000_0000_1000,
-  0x0000_0000_0000_0000, 0x0000_0000_0000_0000, 0x0000_0000_0000_0000,
+  0x0000_0000_0000_0000,
+  0x0000_0000_0000_0000,
+  0x0000_0000_0000_1000,
+  0x0000_0000_0000_0000,
+  0x0000_0000_0000_0000,
+  0x0000_0000_0000_0000,
   0x0000_0000_0000_0000
 ];
 
@@ -227,7 +239,8 @@ pub fn compress_g2(g2: &mut GroupG2) -> Vec<u8> {
     if g2.is_infinity() {
         let mut result: Vec<u8> = vec![0; G2_BYTE_SIZE / 2];
         // Set b_flag 1, all else 0
-        result[0] += u8::pow(2,6);
+        result[0] += u8::pow(2, 6);
+        return result;
     }
 
     // Convert point to array of bytes (x, y)
@@ -240,7 +253,7 @@ pub fn compress_g2(g2: &mut GroupG2) -> Vec<u8> {
 
     // TODO check flags (https://github.com/ethereum/eth2.0-tests/issues/20)
     // Add a_flag1 at 2^767 bit if g2.y.a is odd
-    let flags: u8 = result[0] + u8::pow(2,7) * (g2_bytes[MODBYTES * 3 - 1] % 2);
+    let flags: u8 = result[0] + u8::pow(2, 7) * (g2_bytes[MODBYTES * 3 - 1] % 2);
     result[0] = flags;
 
     result
@@ -256,7 +269,7 @@ pub fn decompress_g2(g2_bytes: &[u8]) -> Result<GroupG2, DecodeError> {
     // Check b_flag
     if g2_bytes[0] % u8::pow(2, 7) / u8::pow(2, 6) == 1 {
         // Point is infinity
-        return Err(DecodeError::Infinity);
+        return Ok(GroupG2::new());
     }
 
     let mut g2_bytes = g2_bytes.to_owned();
