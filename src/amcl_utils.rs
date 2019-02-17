@@ -228,6 +228,7 @@ pub fn compress_g2(g2: &mut GroupG2) -> Vec<u8> {
         let mut result: Vec<u8> = vec![0; G2_BYTE_SIZE / 2];
         // Set b_flag 1, all else 0
         result[0] += u8::pow(2,6);
+        return result;
     }
 
     // Convert point to array of bytes (x, y)
