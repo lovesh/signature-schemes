@@ -256,7 +256,7 @@ pub fn decompress_g2(g2_bytes: &[u8]) -> Result<GroupG2, DecodeError> {
     // Check b_flag
     if g2_bytes[0] % u8::pow(2, 7) / u8::pow(2, 6) == 1 {
         // Point is infinity
-        return Err(DecodeError::Infinity);
+        return Ok(GroupG2::new());
     }
 
     let mut g2_bytes = g2_bytes.to_owned();
