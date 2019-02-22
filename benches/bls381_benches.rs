@@ -89,13 +89,42 @@ fn aggregation(c: &mut Criterion) {
         "aggregation",
         Benchmark::new("Aggregate a Signature", move |b| {
             b.iter(|| {
-                aggregate_signature.add(&sig);
+                black_box(aggregate_signature.add(&sig));
             })
         })
         .sample_size(100),
     );
 }
 
+fn aggregate_verfication(c: &mut Criterion) {
+    let n = 128;
 
-criterion_group!(benches, compression, signing, aggregation);
+    let mut pubkeys = vec![];
+    let mut agg_sig = AggregateSignature::new();
+    let msg = b"signed message";
+    let domain = 0;
+
+    for _ in 0..n {
+        let keypair = Keypair::random();
+        let sig = Signature::new(&msg[..], domain, &keypair.sk);
+        agg_sig.add(&sig);
+        pubkeys.push(keypair.pk);
+    }
+
+    assert_eq!(pubkeys.len(), n);
+
+    c.bench(
+        "aggregation",
+        Benchmark::new("Verifying aggregate of 128 signatures", move |b| {
+            b.iter(|| {
+                let agg_pub = AggregatePublicKey::from_public_keys(&pubkeys);
+                let verified = agg_sig.verify(&msg[..], domain, &agg_pub);
+                assert!(verified);
+            })
+        })
+        .sample_size(100),
+    );
+}
+
+criterion_group!(benches, compression, signing, aggregation, aggregate_verfication);
 criterion_main!(benches);
