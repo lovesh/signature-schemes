@@ -126,5 +126,65 @@ fn aggregate_verfication(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, compression, signing, aggregation, aggregate_verfication);
+fn aggregate_verfication_multiple_messages(c: &mut Criterion) {
+    let n = 128;
+
+    let mut pubkeys = vec![];
+    let mut agg_sig = AggregateSignature::new();
+
+    let mut msgs = vec![
+        vec![0; 32],
+        vec![1; 32],
+    ];
+
+    let domain = 0;
+
+    for i in 0..n {
+        let keypair = Keypair::random();
+
+        let msg = &msgs[i / (n / msgs.len())];
+
+        let sig = Signature::new(&msg[..], domain, &keypair.sk);
+        agg_sig.add(&sig);
+
+        pubkeys.push(keypair.pk);
+    }
+
+    let mut agg_msg = vec![];
+    agg_msg.append(&mut msgs[0].to_vec());
+    agg_msg.append(&mut msgs[1].to_vec());
+
+    assert_eq!(pubkeys.len(), n as usize);
+    assert_eq!(agg_msg.len(), 2 * 32);
+
+    c.bench(
+        "aggregation",
+        Benchmark::new(
+            "Verifying aggregate of 128 signatures with two distinct messages",
+            move |b| {
+                b.iter(|| {
+                    let mut agg_pubs = vec![AggregatePublicKey::new(); 2];
+
+                    for i in 0..n {
+                        agg_pubs[i / (n / msgs.len())].add(&pubkeys[i]);
+                    }
+
+                    let verified = agg_sig.verify_multiple(&agg_msg[..], domain, &agg_pubs);
+
+                    assert!(verified);
+                })
+            },
+        )
+        .sample_size(100),
+    );
+}
+
+criterion_group!(
+    benches,
+    compression,
+    signing,
+    aggregation,
+    aggregate_verfication,
+    aggregate_verfication_multiple_messages
+);
 criterion_main!(benches);
