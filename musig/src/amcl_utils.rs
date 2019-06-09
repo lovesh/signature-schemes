@@ -47,7 +47,7 @@ pub fn get_bytes_for_BigNum(n: &BigNum) -> Vec<u8> {
 
 pub fn get_BigNum_from_bytes(bytes: &[u8]) -> Result<BigNum, SerzDeserzError> {
     if bytes.len() != MODBYTES {
-        return Err(SerzDeserzError::BigNumBytesIncorrectSize(bytes.len(), MODBYTES))
+        return Err(SerzDeserzError::FieldElementBytesIncorrectSize(bytes.len(), MODBYTES))
     }
     Ok(BigNum::frombytes(bytes))
 }
@@ -62,7 +62,7 @@ pub fn get_bytes_for_GroupG_point(point: &GroupG) -> Vec<u8> {
 
 pub fn get_GroupG_point_from_bytes(bytes: &[u8]) -> Result<GroupG, SerzDeserzError> {
     if bytes.len() != GroupG_Size {
-        return Err(SerzDeserzError::GroupG2BytesIncorrectSize(bytes.len(), GroupG_Size))
+        return Err(SerzDeserzError::G2BytesIncorrectSize(bytes.len(), GroupG_Size))
     }
     Ok(GroupG::frombytes(bytes))
 }

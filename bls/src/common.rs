@@ -1,35 +1,33 @@
-extern crate amcl;
-extern crate rand;
-
 use rand::rngs::EntropyRng;
-use super::amcl_utils::{random_big_number, hash_on_GroupG1, ate_pairing,
-                        get_bytes_for_BigNum, get_bytes_for_G2_point, get_G2_point_from_bytes};
-use super::types::{BigNum, GroupG1, GroupG2};
-use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE, MODBYTES};
-use bls::errors::SerzDeserzError;
+use rand::RngCore;
+
+use amcl_wrapper::errors::SerzDeserzError;
+use amcl_wrapper::field_elem::FieldElement;
+use amcl_wrapper::group_elem::GroupElement;
+use amcl_wrapper::group_elem_g2::G2;
 
 pub struct SigKey {
-    pub x: BigNum
+    pub x: FieldElement
 }
 
 impl SigKey {
     pub fn new(rng: Option<EntropyRng>) -> Self {
-        SigKey {
-            x: random_big_number(&CURVE_ORDER, rng),
+        match rng {
+            Some(mut r) => SigKey {
+                x: FieldElement::random_using_rng(&mut r)
+            },
+            None => SigKey {
+                x: FieldElement::random(),
+            }
         }
     }
 
     pub fn from_bytes(sk_bytes: &[u8]) -> Result<SigKey, SerzDeserzError> {
-        if sk_bytes.len() != MODBYTES {
-            return Err(SerzDeserzError::BigNumBytesIncorrectSize(sk_bytes.len(), MODBYTES))
-        }
-        Ok(SigKey {
-            x: BigNum::frombytes(sk_bytes)
-        })
+        FieldElement::from_bytes(sk_bytes).map(|x| SigKey { x })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        get_bytes_for_BigNum(&self.x)
+        self.x.to_bytes()
     }
 }
 
@@ -43,15 +41,13 @@ impl From<Vec<u8>> for SigKey {
 }*/
 
 pub struct VerKey {
-    pub point: GroupG2
+    pub point: G2
 }
 
 impl Clone for VerKey {
     fn clone(&self) -> VerKey {
-        let mut temp_v = GroupG2::new();
-        temp_v.copy(&self.point);
         VerKey {
-            point: temp_v
+            point: self.point.clone()
         }
     }
 }
@@ -59,18 +55,18 @@ impl Clone for VerKey {
 impl VerKey {
     pub fn from_sigkey(sk: &SigKey) -> Self {
         VerKey {
-            point: GeneratorG2.mul(&sk.x),
+            point: G2::generator() * sk.x,
         }
     }
 
     pub fn from_bytes(vk_bytes: &[u8]) -> Result<VerKey, SerzDeserzError> {
         Ok(VerKey {
-            point: get_G2_point_from_bytes(vk_bytes)?
+            point: G2::from_bytes(vk_bytes)?
         })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        get_bytes_for_G2_point(&self.point)
+        self.point.to_bytes()
     }
 }
 
@@ -113,13 +109,13 @@ mod tests {
         let sk2 = SigKey::new(Some(rng));
         for mut sk in vec![sk1, sk2] {
             let mut vk1 = VerKey::from_sigkey(&sk);
-            debug!("{}", sk.x.tostring());
-            debug!("{}", &vk1.point.tostring());
+            debug!("{}", sk.x.to_hex());
+            debug!("{}", &vk1.point.to_hex());
 
             let mut vk2 = VerKey::from_sigkey(&sk);
-            debug!("{}", &vk2.point.tostring());
+            debug!("{}", &vk2.point.to_hex());
 
-            assert_eq!(&vk1.point.tostring(), &vk2.point.tostring());
+            assert_eq!(&vk1.point.to_hex(), &vk2.point.to_hex());
 
             /*let bs = vk1.to_bytes();
             let bs1 = bs.clone();
@@ -137,11 +133,11 @@ mod tests {
 
             let bs = vk1.to_bytes();
             let mut vk11 = VerKey::from_bytes(&bs).unwrap();
-            assert_eq!(&vk1.point.tostring(), &vk11.point.tostring());
+            assert_eq!(&vk1.point.to_hex(), &vk11.point.to_hex());
 
             let bs = sk.to_bytes();
             let mut sk1 = SigKey::from_bytes(&bs).unwrap();
-            assert_eq!(&sk1.x.tostring(), &sk.x.tostring());
+            assert_eq!(&sk1.x.to_hex(), &sk.x.to_hex());
         }
     }
 }

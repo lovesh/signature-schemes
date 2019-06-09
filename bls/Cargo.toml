@@ -1,0 +1,16 @@
+[package]
+name = "bls-signature"
+version = "0.3.0"
+authors = ["Lovesh Harchandani <lovesh.bond@gmail.com>"]
+description = "BLS signatures. 2 variations"
+license = "Apache-2.0"
+
+[dependencies]
+rand = "0.6"
+lazy_static = "1.3.0"
+log = "*"
+
+[dependencies.amcl_wrapper]
+git = "https://github.com/lovesh/amcl_rust_wrapper"
+branch = "master"
+features = ["bls381"]

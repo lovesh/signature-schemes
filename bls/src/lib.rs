@@ -7,17 +7,14 @@
 // TODO: Add From and Into traits for converting from and to bytes for various structs
 // TODO: Support point compression
 
-extern crate amcl;
 extern crate rand;
+#[macro_use]
+extern crate amcl_wrapper;
+
+#[macro_use]
+extern crate log;
 
 pub mod common;
 pub mod simple;
 pub mod aggr_slow;
 pub mod aggr_fast;
-pub mod types;
-pub mod constants;
-pub mod errors;
-pub mod amcl_utils;
-
-// Change self::amcl::bls381 to self::amcl::bls383 to use BLS383 curve
-pub use self::amcl::bls381 as BLSCurve;

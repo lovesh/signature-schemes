@@ -1,23 +1,21 @@
-extern crate amcl;
+use amcl_wrapper::errors::SerzDeserzError;
+use amcl_wrapper::field_elem::FieldElement;
+use amcl_wrapper::group_elem::GroupElement;
+use amcl_wrapper::group_elem_g1::G1;
+use amcl_wrapper::group_elem_g2::G2;
+use amcl_wrapper::utils::ate_pairing;
 
-use super::amcl_utils::{hash_on_GroupG1, ate_pairing};
-use super::types::GroupG1;
-use super::constants::{CURVE_ORDER, GeneratorG2, GroupG2_SIZE};
 use super::common::{SigKey, VerKey, Keypair};
-use bls::errors::SerzDeserzError;
-use bls::amcl_utils::get_G1_point_from_bytes;
-use bls::amcl_utils::get_bytes_for_G1_point;
+
 
 pub struct Signature {
-    pub point: GroupG1,
+    pub point: G1,
 }
 
 impl Clone for Signature {
     fn clone(&self) -> Signature {
-        let mut temp_s = GroupG1::new();
-        temp_s.copy(&self.point);
         Signature {
-            point: temp_s
+            point: self.point.clone()
         }
     }
 }
@@ -25,8 +23,8 @@ impl Clone for Signature {
 impl Signature {
     // Signature = H_0(msg) * sk
     pub fn new(msg: &[u8], sig_key: &SigKey) -> Self {
-        let hash_point = hash_on_GroupG1(msg);
-        let sig = hash_point.mul(&sig_key.x);
+        let hash_point = G1::from_msg_hash(msg);
+        let sig = hash_point * &sig_key.x;
         // This is different from the paper, the other exponentiation happens in aggregation.
         // This avoids the signer to know beforehand of all other participants
         Signature { point: sig }
@@ -34,29 +32,22 @@ impl Signature {
 
     pub fn verify(&self, msg: &[u8], ver_key: &VerKey) -> bool {
         // TODO: Check if point exists on curve, maybe use `ECP::new_big` and x cord of verkey
-        if self.point.is_infinity() {
+        if self.point.is_identity() {
             println!("Signature point at infinity");
             return false;
         }
-        let msg_hash_point = hash_on_GroupG1(msg);
-        let mut lhs = ate_pairing(&GeneratorG2, &self.point);
-        let mut rhs = ate_pairing(&ver_key.point, &msg_hash_point);
-        /*let mut lhs_bytes: [u8; FP12_SIZE] = [0; FP12_SIZE];
-        let mut rhs_bytes: [u8; FP12_SIZE] = [0; FP12_SIZE];
-        lhs.tobytes(&mut lhs_bytes);
-        rhs.tobytes(&mut rhs_bytes);
-        lhs_bytes.to_vec() == rhs_bytes.to_vec()*/
-        lhs.equals(&mut rhs)
+        let msg_hash_point = G1::from_msg_hash(msg);
+        let lhs = ate_pairing(&self.point, &G2::generator());
+        let rhs = ate_pairing(&msg_hash_point, &ver_key.point);
+        lhs == rhs
     }
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<Signature, SerzDeserzError> {
-        Ok(Signature {
-            point: get_G1_point_from_bytes(sig_bytes)?
-        })
+        G1::from_bytes(sig_bytes).map(|point| Signature { point })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        get_bytes_for_G1_point(&self.point)
+        self.point.to_bytes()
     }
 }
 
@@ -92,7 +83,7 @@ mod tests {
 
             let bs = sig.to_bytes();
             let mut sig1 = Signature::from_bytes(&bs).unwrap();
-            assert_eq!(&sig.point.tostring(), &sig1.point.tostring());
+            assert_eq!(&sig.point.to_hex(), &sig1.point.to_hex());
         }
     }
 
@@ -116,8 +107,7 @@ mod tests {
         let vk = keypair.ver_key;
 
         let msg = "Small msg".as_bytes();
-        let mut sig = Signature { point: GroupG1::new() };
-        sig.point.inf();
+        let sig = Signature { point: G1::identity() };
         assert_eq!(sig.verify(&msg, &vk), false);
     }
 }
