@@ -1,18 +1,3 @@
-[package]
-name = "signature-schemes"
-version = "0.3.0"
-authors = ["Lovesh Harchandani <lovesh.bond@gmail.com>"]
-description = "Various signature schemes. BLS, MuSig"
-license = "Apache-2.0"
-
-[dependencies]
-rand = "0.6"
-lazy_static = "1.3.0"
-log = "*"
-
-#[dependencies.amcl]
-#path = "./amcl"
-
 [workspace]
 members = [
     "bls",

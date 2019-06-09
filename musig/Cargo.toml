@@ -1,5 +1,5 @@
 [package]
-name = "MuSig"
+name = "musig-acml"
 version = "0.3.0"
 authors = ["Lovesh Harchandani <lovesh.bond@gmail.com>"]
 description = "MuSig"
@@ -13,4 +13,4 @@ log = "*"
 [dependencies.amcl_wrapper]
 git = "https://github.com/lovesh/amcl_rust_wrapper"
 branch = "master"
-features = ["secp256k1"]
+features = ["bls381"]

@@ -1,5 +1,5 @@
 [package]
-name = "bls-signature"
+name = "bls-acml"
 version = "0.3.0"
 authors = ["Lovesh Harchandani <lovesh.bond@gmail.com>"]
 description = "BLS signatures. 2 variations"

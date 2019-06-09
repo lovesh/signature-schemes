@@ -60,9 +60,7 @@ impl VerKey {
     }
 
     pub fn from_bytes(vk_bytes: &[u8]) -> Result<VerKey, SerzDeserzError> {
-        Ok(VerKey {
-            point: G2::from_bytes(vk_bytes)?
-        })
+        G2::from_bytes(vk_bytes).map(|point| VerKey { point })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

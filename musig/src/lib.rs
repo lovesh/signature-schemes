@@ -1,10 +1,4 @@
-extern crate amcl;
 extern crate rand;
+extern crate amcl_wrapper;
 
 pub mod musig;
-pub mod types;
-pub mod constants;
-pub mod amcl_utils;
-pub mod errors;
-
-pub use self::amcl::secp256k1 as SchnorrCurve;
