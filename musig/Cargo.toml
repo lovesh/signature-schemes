@@ -13,4 +13,5 @@ log = "*"
 [dependencies.amcl_wrapper]
 git = "https://github.com/lovesh/amcl_rust_wrapper"
 branch = "master"
-features = ["bls381"]
+#path = "/home/lovesh/dev/amcl_wrapper"
+features = ["secp256k1"]

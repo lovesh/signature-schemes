@@ -9,6 +9,17 @@ use amcl_wrapper::errors::SerzDeserzError;
 use amcl_wrapper::constants::MODBYTES;
 
 
+#[derive(Debug, Clone, Copy)]
+pub enum MuSigError {
+    IncorrectCosignerRef(usize),
+    UnknownCosignerRef(usize),
+    HashToCommitmentNotPresent(usize),
+    HashDoesNotMatchCommitment(usize),
+    Phase1Incomplete(),
+    Phase2Incomplete(),
+    DifferentNonceFoundDuringAggregation(G1)
+}
+
 pub struct SigKey {
     pub x: FieldElement
 }
@@ -75,57 +86,6 @@ impl Keypair {
     }
 }
 
-pub struct Nonce {
-    pub x: Option<FieldElement>,
-    pub point: G1
-}
-
-impl Clone for Nonce {
-    fn clone(&self) -> Nonce {
-        Nonce {
-            x: self.x.clone(),
-            point: self.point.clone()
-        }
-    }
-}
-
-impl Nonce {
-    pub fn new(rng: Option<EntropyRng>) -> Self {
-        let n = match rng {
-            Some(mut r) => FieldElement::random_using_rng(&mut r),
-            None => FieldElement::random()
-        };
-        let p = G1::generator() * n;
-        Nonce {
-            x: Some(n),
-            point: p,
-        }
-    }
-
-    pub fn aggregate(nonces: &Vec<Nonce>) -> Nonce {
-        let mut an = G1::identity();
-        for n in nonces {
-            an += n.point;
-        }
-        Nonce {
-            x: None,
-            point: an,
-        }
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Result<Nonce, SerzDeserzError> {
-        G1::from_bytes(bytes).map(|point| Nonce {
-            x: None,
-            point
-        })
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.point.to_bytes()
-    }
-}
-
-
 pub struct HashedVerKeys {
     pub b: [u8; MODBYTES]
 }
@@ -147,6 +107,7 @@ impl HashedVerKeys {
         let mut bytes: Vec<u8> = vec![];
         bytes.extend(self.b.iter());
         bytes.extend(verkey.to_bytes());
+        // TODO: Need domain separation for H_agg
         FieldElement::from_msg_hash(&bytes)
     }
 }
@@ -164,16 +125,20 @@ impl Clone for AggregatedVerKey {
 }
 
 impl AggregatedVerKey {
-    pub fn new(verkeys: &Vec<VerKey>) -> AggregatedVerKey {
+    pub fn new(verkeys: &Vec<VerKey>) -> Self {
         let L = HashedVerKeys::new(verkeys);
+        Self::new_from_L(verkeys, &L)
+    }
+
+    pub fn new_from_L(verkeys: &Vec<VerKey>, L: &HashedVerKeys) -> Self {
         let mut avk = G1::identity();
         for vk in verkeys {
-            let point = vk.point * L.hash_with_verkey(vk);
+            let a = L.hash_with_verkey(vk);
+            let point = vk.point * a;
             avk += point;
-            //avk.add(&point);
         }
         AggregatedVerKey {
-            point: avk,
+            point: avk
         }
     }
 
@@ -186,39 +151,133 @@ impl AggregatedVerKey {
     }
 }
 
-pub struct Signature {
-    pub x: FieldElement
+type Signature = (FieldElement, G1);
+
+/// `t`, `R` are local (to the current signer) references to the cosigners.
+/// The current signer always references himself by index 0.
+pub struct Signer {
+    pub r: FieldElement,
+    pub R: Vec<G1>,
+    pub t: Vec<FieldElement>
+
 }
 
-impl Signature {
-    // Signature =
-    pub fn new(msg: &[u8], sig_key: &SigKey, nonce: &FieldElement, verkey: &VerKey,
-               all_nonces: &Vec<Nonce>, all_verkeys: &Vec<VerKey>) -> Self {
-        let R = Nonce::aggregate(all_nonces);
-        let L = HashedVerKeys::new(all_verkeys);
-        let avk = AggregatedVerKey::new(all_verkeys);
-
-        Signature::new_using_aggregated_objs(msg, sig_key, nonce, verkey, &R, &L, &avk)
+impl Signer {
+    /// `num_cosigners` is inclusive of the current signer.
+    pub fn new(num_cosigners: usize) -> Self {
+        Signer {
+            r: FieldElement::new(),
+            // It is cleaner to use Vec of Option and use None for unfilled index rather than identity or zero
+            R: (0..num_cosigners).map(|_| G1::identity()).collect(),
+            t: (0..num_cosigners).map(|_| FieldElement::zero()).collect(),
+        }
     }
 
-    pub fn new_using_aggregated_objs(msg: &[u8], sig_key: &SigKey, nonce: &FieldElement, verkey: &VerKey,
-                                     R: &Nonce, L: &HashedVerKeys, avk: &AggregatedVerKey) -> Self {
-        let mut h = L.hash_with_verkey(&verkey);
+    /// Signer creates his r, R and t
+    pub fn init_phase_1(&mut self) {
+        let r = FieldElement::random();
+        let R = G1::generator() * r;
+        // TODO: Need domain separation for H_com
+        let t = FieldElement::from_msg_hash(&R.to_bytes());
+        self.r = r;
+        self.R[0] = R;
+        self.t[0] = t;
+    }
 
-        let mut challenge = Signature::compute_challenge(msg, &avk.to_bytes(), &R.to_bytes());
-        
-        let mut product = (challenge * h * sig_key.x) + nonce;
+    /// Process the received `t` from other cosigners
+    pub fn got_hash(&mut self, t: FieldElement, cosigner_ref: usize) -> Result<(), MuSigError> {
+        self.validate_cosigner_ref(cosigner_ref)?;
+        self.t[cosigner_ref] = t;
+        Ok(())
+    }
 
-        Signature { x: product }
+    /// Process the received `R` from other cosigners
+    pub fn got_commitment(&mut self, R: G1, cosigner_ref: usize) -> Result<(), MuSigError> {
+        if !self.is_phase_1_complete() {
+            return Err(MuSigError::Phase1Incomplete())
+        }
+        self.validate_cosigner_ref(cosigner_ref)?;
+        let expected_t = FieldElement::from_msg_hash(&R.to_bytes());
+        if expected_t != self.t[cosigner_ref] {
+            return Err(MuSigError::HashDoesNotMatchCommitment(cosigner_ref))
+        }
+        self.R[cosigner_ref] = R;
+        Ok(())
+    }
+
+    pub fn generate_sig(&self, msg: &[u8], sig_key: &SigKey, verkey: &VerKey,
+                        all_verkeys: &Vec<VerKey>) -> Result<Signature, MuSigError> {
+        if !self.is_phase_2_complete() {
+            return Err(MuSigError::Phase2Incomplete())
+        }
+        let R = Self::compute_aggregated_nonce(&self.R);
+
+        let L = HashedVerKeys::new(all_verkeys);
+        let a = L.hash_with_verkey(&verkey);
+        let avk = AggregatedVerKey::new_from_L(all_verkeys, &L);
+
+        Ok(Signer::generate_sig_using_aggregated_objs(msg, sig_key, &self.r, verkey, R, &a, &avk))
+    }
+
+    /// Checks if `t`, i.e. hash to commitment from all cosigners is received
+    pub fn is_phase_1_complete(&self) -> bool {
+        for t in &self.t {
+            if t.is_zero() {
+                return false
+            }
+        }
+        true
+    }
+
+    /// Checks if `R`, i.e. commitment from all cosigners is received
+    pub fn is_phase_2_complete(&self) -> bool {
+        for R in &self.R {
+            if R.is_identity() {
+                return false
+            }
+        }
+        true
+    }
+
+    pub fn compute_aggregated_nonce(nonces: &[G1]) -> G1 {
+        let mut R = G1::identity();
+        for n in nonces {
+            R += *n;
+        }
+        R
     }
 
     pub fn compute_challenge(msg: &[u8], aggr_verkey: &[u8], aggr_nonce: &[u8]) -> FieldElement {
+        // TODO: Need domain separation for H_sig
         let mut challenge_bytes: Vec<u8> = vec![];
         challenge_bytes.extend(aggr_verkey);
         challenge_bytes.extend(aggr_nonce);
         challenge_bytes.extend(msg);
         FieldElement::from_msg_hash(&challenge_bytes)
     }
+
+    fn validate_cosigner_ref(&self, cosigner_ref: usize) -> Result<(), MuSigError> {
+        if cosigner_ref == 0 {
+            // Since 0 always references the current signer
+            return Err(MuSigError::IncorrectCosignerRef(cosigner_ref))
+        }
+        // Does not matter if `self.R.len` is used or `self.t.len` as they have same length
+        if cosigner_ref >= self.t.len() {
+            return Err(MuSigError::UnknownCosignerRef(cosigner_ref))
+        }
+        Ok(())
+    }
+
+    pub fn generate_sig_using_aggregated_objs(msg: &[u8], sig_key: &SigKey, nonce: &FieldElement, verkey: &VerKey,
+                                              R: G1, a: &FieldElement, avk: &AggregatedVerKey) -> Signature {
+
+        let challenge = Self::compute_challenge(msg, &avk.to_bytes(), &R.to_bytes());
+
+        let s = (challenge * a * sig_key.x) + nonce;
+        (s, R)
+    }
+
+    /*
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<Signature, SerzDeserzError> {
         FieldElement::from_bytes(sig_bytes).map(|x| Signature { x })
@@ -227,48 +286,53 @@ impl Signature {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         self.x.to_bytes()
-    }
+    }*/
 }
 
 
 pub struct AggregatedSignature {
-    pub x: FieldElement
+    pub s: FieldElement,
+    pub R: G1,
 }
 
 impl AggregatedSignature {
-    pub fn new(signatures: &[Signature]) -> Self {
-        let mut aggr_sig: FieldElement = FieldElement::new();
-        for sig in signatures {
-            //aggr_sig.add(&sig.x);
-            aggr_sig += sig.x
+    pub fn new(signatures: &[Signature]) -> Result<Self, MuSigError> {
+        assert!(signatures.len() > 0);
+        let mut aggr_sig = signatures[0].0.clone();
+        let R = signatures[0].1.clone();
+        for sig in signatures.iter().skip(1) {
+            if sig.1 != R {
+                return Err(MuSigError::DifferentNonceFoundDuringAggregation(R))
+            }
+            aggr_sig += sig.0
         }
-        AggregatedSignature {
-            x: aggr_sig
-        }
+        Ok(AggregatedSignature {
+            s: aggr_sig,
+            R
+        })
     }
 
-    pub fn verify(&self, msg: &[u8], nonces: &Vec<Nonce>, ver_keys: &Vec<VerKey>) -> bool {
-        let R = Nonce::aggregate(nonces);
+    pub fn verify(&self, msg: &[u8], ver_keys: &Vec<VerKey>) -> bool {
         let avk = AggregatedVerKey::new(ver_keys);
-        self.verify_using_aggregated_objs(msg, &R, &avk)
+        self.verify_using_aggregated_verkey(msg, &avk)
     }
 
-    pub fn verify_using_aggregated_objs(&self, msg: &[u8], R: &Nonce, avk: &AggregatedVerKey) -> bool {
-        let challenge = Signature::compute_challenge(msg, &avk.to_bytes(),
-                                                     &R.to_bytes());
-        let lhs = G1::generator() * self.x;
-        let rhs = G1::identity() + &R.point + &(&avk.point * &challenge);
+    pub fn verify_using_aggregated_verkey(&self, msg: &[u8], avk: &AggregatedVerKey) -> bool {
+        let challenge = Signer::compute_challenge(msg, &avk.to_bytes(),
+                                                  &self.R.to_bytes());
+        let lhs = G1::generator() * self.s;
+        let rhs = &self.R + (&avk.point * &challenge);
         lhs == rhs
     }
 
-    pub fn from_bytes(asig_bytes: &[u8]) -> Result<AggregatedSignature, SerzDeserzError> {
-        FieldElement::from_bytes(asig_bytes).map(|x| AggregatedSignature { x })
+    /*pub fn from_bytes(asig_bytes: &[u8]) -> Result<AggregatedSignature, SerzDeserzError> {
+        FieldElement::from_bytes(asig_bytes).map(|s| AggregatedSignature { s })
 
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.x.to_bytes()
-    }
+        self.s.to_bytes()
+    }*/
 }
 
 #[cfg(test)]
@@ -277,24 +341,25 @@ mod tests {
 
     #[test]
     fn gen_verkey() {
-        let mut sk = SigKey::new(None);
-        let mut vk1 = VerKey::from_sigkey(&sk);
-        let mut vk2 = VerKey::from_sigkey(&sk);
+        let sk = SigKey::new(None);
+        let vk1 = VerKey::from_sigkey(&sk);
+        let vk2 = VerKey::from_sigkey(&sk);
         assert_eq!(&vk1.point.to_hex(), &vk2.point.to_hex());
 
         let bs = vk1.to_bytes();
-        let mut vk11 = VerKey::from_bytes(&bs).unwrap();
+        let vk11 = VerKey::from_bytes(&bs).unwrap();
         assert_eq!(&vk1.point.to_hex(), &vk11.point.to_hex());
 
         let bs = sk.to_bytes();
-        let mut sk1 = SigKey::from_bytes(&bs).unwrap();
+        let sk1 = SigKey::from_bytes(&bs).unwrap();
         assert_eq!(&sk1.x.to_hex(), &sk.x.to_hex());
     }
 
 
     #[test]
     fn aggr_sign_verify() {
-        let keypairs: Vec<Keypair> = (0..5).map(|_| Keypair::new(None)).collect();
+        let num_cosigners = 5;
+        let keypairs: Vec<Keypair> = (0..num_cosigners).map(|_| Keypair::new(None)).collect();
         let verkeys: Vec<VerKey> = keypairs.iter().map(|k| k.ver_key.clone()).collect();
 
         let msgs = vec![
@@ -306,36 +371,72 @@ mod tests {
         ];
 
         for msg in msgs {
-            let nonces: Vec<Nonce> = (0..5).map(|_| Nonce::new(None)).collect();
+            let mut signers: Vec<_> = (0..num_cosigners).map(|_| Signer::new(num_cosigners)).collect();
+            for signer in &mut signers {
+                signer.init_phase_1();
+            }
+
+            // Do phase 1. Each cosigner generates r, t, R and shares t with others.
+            let ts: Vec<FieldElement> = (0..num_cosigners).map(|i| signers[i].t[0].clone()).collect();
+            for i in 0..num_cosigners {
+                let signer = &mut signers[i];
+                let mut k = 1;
+                for j in 0..num_cosigners {
+                    if i == j { continue }
+                    signer.got_hash(ts[j], k).unwrap();
+                    k += 1;
+                }
+            }
+            for i in 0..num_cosigners {
+                assert!(signers[i].is_phase_1_complete());
+            }
+
+            // Do phase 2. Each cosigner shares R with others
+            let Rs: Vec<G1> = (0..num_cosigners).map(|i| signers[i].R[0].clone()).collect();
+            for i in 0..num_cosigners {
+                let signer = &mut signers[i];
+                let mut k = 1;
+                for j in 0..num_cosigners {
+                    if i == j { continue }
+                    signer.got_commitment(Rs[j], k).unwrap();
+                    k += 1;
+                }
+            }
+            for i in 0..num_cosigners {
+                assert!(signers[i].is_phase_2_complete());
+            }
+
             let mut signatures: Vec<Signature> = vec![];
             let msg_b = msg.as_bytes();
-            for i in 0..5 {
+            for i in 0..num_cosigners {
+                let signer = &signers[i];
                 let keypair = &keypairs[i];
-                let sig = Signature::new(msg_b, &keypair.sig_key, &nonces[i].x.unwrap(), &keypair.ver_key, &nonces, &verkeys);
+                let sig = signer.generate_sig(msg_b, &keypair.sig_key, &keypair.ver_key, &verkeys).unwrap();
                 signatures.push(sig);
             }
-            let aggr_sig: AggregatedSignature = AggregatedSignature::new(&signatures);
-            assert!(aggr_sig.verify(msg_b, &nonces, &verkeys));
+            let aggr_sig = AggregatedSignature::new(&signatures).unwrap();
+            assert!(aggr_sig.verify(msg_b, &verkeys));
 
-            let R = Nonce::aggregate(&nonces);
             let verkeys = keypairs.iter().map(|k| k.ver_key.clone()).collect();
             let L = HashedVerKeys::new(&verkeys);
             let mut avk = AggregatedVerKey::new(&verkeys);
 
             let mut signatures: Vec<Signature> = vec![];
-            for i in 0..5 {
+            let R = Signer::compute_aggregated_nonce(&signers[0].R);
+            for i in 0..num_cosigners {
                 let keypair = &keypairs[i];
-                let sig = Signature::new_using_aggregated_objs(msg_b, &keypair.sig_key, &nonces[i].x.unwrap(), &keypair.ver_key, &R, &L, &avk);
+                let a = L.hash_with_verkey(&keypair.ver_key);
+                let sig = Signer::generate_sig_using_aggregated_objs(msg_b, &keypair.sig_key, &signers[i].r, &keypair.ver_key, R, &a, &avk);
                 signatures.push(sig);
             }
-            let aggr_sig: AggregatedSignature = AggregatedSignature::new(&signatures);
-            assert!(aggr_sig.verify_using_aggregated_objs(msg_b, &R, &avk));
+            let aggr_sig = AggregatedSignature::new(&signatures).unwrap();
+            assert!(aggr_sig.verify_using_aggregated_verkey(msg_b, &avk));
 
             let bs = avk.to_bytes();
             let mut avk_from_bytes = AggregatedVerKey::from_bytes(&bs).unwrap();
-            // FIXME: Next line fails
+            // FIXME: Next line fails, probably something wrong with main amcl codebase.
             //assert_eq!(&avk.point.to_hex(), &avk_from_bytes.point.to_hex());
-            assert!(aggr_sig.verify_using_aggregated_objs(msg_b, &R, &avk_from_bytes));
+            assert!(aggr_sig.verify_using_aggregated_verkey(msg_b, &avk_from_bytes));
         }
     }
 }

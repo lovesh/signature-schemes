@@ -2,7 +2,7 @@ use amcl_wrapper::errors::SerzDeserzError;
 use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g1::G1;
 use amcl_wrapper::group_elem_g2::G2;
-use amcl_wrapper::utils::ate_pairing;
+use amcl_wrapper::extension_field_gt::GT;
 
 use super::common::{SigKey, VerKey, Keypair};
 use super::simple::Signature;
@@ -10,7 +10,6 @@ use super::simple::Signature;
 
 // This is an older but FASTER way of doing BLS signature aggregation but it IS VULNERABLE to rogue
 // public key attack. Use the proof of possession before trusting a new Verkey.
-
 
 pub fn generate_proof_of_possession(verkey: &VerKey, sigkey: &SigKey) -> Signature {
     Signature::new(verkey.to_bytes().as_ref(), &sigkey)
@@ -70,8 +69,8 @@ impl AggregatedSignatureFast {
             return false;
         }
         let msg_hash_point = G1::from_msg_hash(msg);
-        let lhs = ate_pairing(&self.point, &G2::generator());
-        let rhs = ate_pairing(&msg_hash_point, &avk.point);
+        let lhs = GT::ate_pairing(&self.point, &G2::generator());
+        let rhs = GT::ate_pairing(&msg_hash_point, &avk.point);
         lhs == rhs
     }
 
@@ -139,7 +138,7 @@ mod tests {
             let bs = asig.to_bytes();
             let mut sig1 = AggregatedSignatureFast::from_bytes(&bs).unwrap();
             assert!(sig1.verify_using_aggr_vk(&b, &avk));
-            // FIXME: Next line fails
+            // FIXME: Next line fails, probably something wrong with main amcl codebase.
             //assert_eq!(&asig.point.to_hex(), &sig1.point.to_hex());
 
             let bs = avk.to_bytes();
