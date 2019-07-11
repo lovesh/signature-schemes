@@ -12,6 +12,7 @@ use super::simple::Signature;
 // This is a newer but SLOWER way of doing BLS signature aggregation. This is NOT VULNERABLE to
 // rogue public key attack so does not need proof of possession.
 
+#[derive(Clone)]
 pub struct AggregatedVerKey {
     pub point: G2
 }
@@ -63,6 +64,7 @@ impl AggregatedVerKey {
     }
 }
 
+#[derive(Clone)]
 pub struct AggregatedSignature {
     pub point: G1
 }
