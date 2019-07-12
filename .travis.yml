@@ -2,5 +2,9 @@ language: rust
 rust:
   - stable
 script:
+  - cd musig
+  - cargo build --release
+  - cargo test --release
+  - cd ../bls
   - cargo build --release
   - cargo test --release
