@@ -109,9 +109,14 @@ impl AggregatedSignature {
             return false;
         }
         let msg_hash_point = G1::from_msg_hash(msg);
-        let lhs = GT::ate_pairing(&self.point, &G2::generator());
+        /*let lhs = GT::ate_pairing(&self.point, &G2::generator());
         let rhs = GT::ate_pairing(&msg_hash_point, &avk.point);
-        lhs == rhs
+        lhs == rhs*/
+        // Check that e(self.point, G2::generator()) == e(msg_hash_point, avk.point)
+        // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, G2::generator())^-1 == 1
+        // or e(msg_hash_point, avk.point) * e(self.point, -G2::generator()) == 1
+        let e = GT::ate_2_pairing(&self.point, &G2::generator().negation(), &msg_hash_point, &avk.point);
+        e.is_one()
     }
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<AggregatedSignature, SerzDeserzError> {

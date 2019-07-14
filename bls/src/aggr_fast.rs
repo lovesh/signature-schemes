@@ -64,14 +64,20 @@ impl AggregatedSignatureFast {
     // For verifying multiple aggregate signatures from the same signers,
     // an aggregated verkey should be created once and then used for each signature verification
     pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKeyFast) -> bool {
+        // TODO: combine verification code with the one in aggr_slow.rs
         if self.point.is_identity() {
             println!("Signature point at infinity");
             return false;
         }
         let msg_hash_point = G1::from_msg_hash(msg);
-        let lhs = GT::ate_pairing(&self.point, &G2::generator());
+        /*let lhs = GT::ate_pairing(&self.point, &G2::generator());
         let rhs = GT::ate_pairing(&msg_hash_point, &avk.point);
-        lhs == rhs
+        lhs == rhs*/
+        // Check that e(self.point, G2::generator()) == e(msg_hash_point, avk.point)
+        // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, G2::generator())^-1 == 1
+        // or e(msg_hash_point, avk.point) * e(self.point, -G2::generator()) == 1
+        let e = GT::ate_2_pairing(&self.point, &G2::generator().negation(), &msg_hash_point, &avk.point);
+        e.is_one()
     }
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<AggregatedSignatureFast, SerzDeserzError> {
@@ -129,20 +135,20 @@ mod tests {
             let vks_1: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let vks_2: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let sigs: Vec<&Signature> = sigs.iter().map(|s| s).collect();
-            let mut asig = AggregatedSignatureFast::new(sigs);
+            let asig = AggregatedSignatureFast::new(sigs);
             assert!(asig.verify(&b, vks_1));
 
-            let mut avk = AggregatedVerKeyFast::new(vks_2);
+            let avk = AggregatedVerKeyFast::new(vks_2);
             assert!(asig.verify_using_aggr_vk(&b, &avk));
 
             let bs = asig.to_bytes();
-            let mut sig1 = AggregatedSignatureFast::from_bytes(&bs).unwrap();
+            let sig1 = AggregatedSignatureFast::from_bytes(&bs).unwrap();
             assert!(sig1.verify_using_aggr_vk(&b, &avk));
             // FIXME: Next line fails, probably something wrong with main amcl codebase.
             //assert_eq!(&asig.point.to_hex(), &sig1.point.to_hex());
 
             let bs = avk.to_bytes();
-            let mut avk1 = AggregatedVerKeyFast::from_bytes(&bs).unwrap();
+            let avk1 = AggregatedVerKeyFast::from_bytes(&bs).unwrap();
             assert_eq!(&avk.point.to_hex(), &avk1.point.to_hex());
         }
     }
