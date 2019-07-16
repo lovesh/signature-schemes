@@ -8,9 +8,9 @@
 // TODO: Support point compression
 
 extern crate rand;
-#[macro_use]
 extern crate amcl_wrapper;
 
+#[cfg(test)]
 #[macro_use]
 extern crate log;
 

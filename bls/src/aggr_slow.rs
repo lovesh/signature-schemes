@@ -5,13 +5,13 @@ use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g1::G1;
 use amcl_wrapper::group_elem_g2::G2;
 
-use super::common::{Keypair, VerKey};
+use super::common::VerKey;
 use super::simple::Signature;
 
 // This is a newer but SLOWER way of doing BLS signature aggregation. This is NOT VULNERABLE to
 // rogue public key attack so does not need proof of possession.
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AggregatedVerKey {
     pub point: G2,
 }
@@ -66,7 +66,7 @@ impl AggregatedVerKey {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AggregatedSignature {
     pub point: G1,
 }
@@ -151,6 +151,7 @@ mod tests {
     // TODO: Add tests for failure
     // TODO: Add more test vectors
     use super::*;
+    use crate::common::Keypair;
 
     #[test]
     fn aggr_sign_verify() {
