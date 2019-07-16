@@ -6,6 +6,7 @@ use amcl_wrapper::field_elem::FieldElement;
 use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g2::G2;
 
+#[derive(Clone)]
 pub struct SigKey {
     pub x: FieldElement
 }
