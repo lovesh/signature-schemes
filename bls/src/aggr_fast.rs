@@ -4,7 +4,7 @@ use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g1::G1;
 use amcl_wrapper::group_elem_g2::G2;
 
-use super::common::{Keypair, SigKey, VerKey};
+use super::common::{SigKey, VerKey};
 use super::simple::Signature;
 
 // This is an older but FASTER way of doing BLS signature aggregation but it IS VULNERABLE to rogue
@@ -18,6 +18,7 @@ pub fn verify_proof_of_possession(proof: &Signature, verkey: &VerKey) -> bool {
     proof.verify(verkey.to_bytes().as_ref(), verkey)
 }
 
+#[derive(Debug, Clone)]
 pub struct AggregatedVerKeyFast {
     pub point: G2,
 }
@@ -40,6 +41,7 @@ impl AggregatedVerKeyFast {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AggregatedSignatureFast {
     pub point: G1,
 }
@@ -96,6 +98,7 @@ mod tests {
     // TODO: Add tests for failure
     // TODO: Add more test vectors
     use super::*;
+    use crate::common::Keypair;
 
     #[test]
     fn proof_of_possession() {

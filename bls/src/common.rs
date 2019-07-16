@@ -1,11 +1,11 @@
 use rand::rngs::EntropyRng;
-use rand::RngCore;
 
 use amcl_wrapper::errors::SerzDeserzError;
 use amcl_wrapper::field_elem::FieldElement;
 use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g2::G2;
 
+#[derive(Debug, Clone)]
 pub struct SigKey {
     pub x: FieldElement,
 }
@@ -40,16 +40,9 @@ impl From<Vec<u8>> for SigKey {
     }
 }*/
 
+#[derive(Debug, Clone)]
 pub struct VerKey {
     pub point: G2,
-}
-
-impl Clone for VerKey {
-    fn clone(&self) -> VerKey {
-        VerKey {
-            point: self.point.clone(),
-        }
-    }
 }
 
 impl VerKey {
