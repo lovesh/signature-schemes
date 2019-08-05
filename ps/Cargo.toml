@@ -8,6 +8,8 @@ edition = "2018"
 rand = "0.6"
 lazy_static = "1.3.0"
 log = "*"
+merlin = "1.2.0"
+failure = "0.1.5"
 
 [dependencies.amcl_wrapper]
 git = "https://github.com/lovesh/amcl_rust_wrapper"
