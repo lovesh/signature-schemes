@@ -12,8 +12,9 @@ merlin = "1.2.0"
 failure = "0.1.5"
 
 [dependencies.amcl_wrapper]
-git = "https://github.com/lovesh/amcl_rust_wrapper"
-branch = "master"
+#git = "https://github.com/lovesh/amcl_rust_wrapper"
+#branch = "master"
+path = "../../amcl_wrapper"
 default-features = false
 features = ["bls381"]
 

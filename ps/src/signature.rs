@@ -13,7 +13,7 @@ pub struct Signature {
 
 /// Section  6.1 of paper
 impl Signature {
-    /// No committed messages
+    /// No committed messages. All messages known to signer.
     pub fn new(messages: &[FieldElement], sigkey: &Sigkey, verkey: &Verkey) -> Result<Self, PSError> {
         // TODO: Take PRNG as argument. This will allow deterministic signatures as well
         Self::check_verkey_and_messages_compat(messages, verkey)?;
@@ -71,7 +71,7 @@ impl Signature {
             points.push(verkey.Y_tilde[i].clone());
         }
         // pr = X_tilde * Y_tilde[0]^messages[0] * Y_tilde[1]^messages[1] * .... Y_tilde[i]^messages[i]
-        let pr = points.multi_scalar_mul_const_time(&scalars).unwrap();
+        let pr = points.multi_scalar_mul_var_time(&scalars).unwrap();
         // check e(sigma_1, pr) == e(sigma_2, g_tilde) => e(sigma_1, pr) * e(sigma_2, g_tilde)^-1 == 1
         // => e(sigma_1, pr) * e(sigma_2, -g_tilde) == 1
         let neg_g_tilde = verkey.g_tilde.negation();
