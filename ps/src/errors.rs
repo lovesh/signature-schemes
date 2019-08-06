@@ -10,4 +10,8 @@ pub enum PSError {
 
     #[fail(display = "Same no of bases and exponents required. {} bases and {} exponents", bases, exponents)]
     UnequalNoOfBasesExponents { bases: usize, exponents: usize },
+
+    #[fail(display = "Error with message {:?}", msg)]
+    GeneralError { msg: String },
+
 }
