@@ -5,9 +5,7 @@ use crate::errors::PSError;
 use crate::{OtherGroup, SignatureGroup};
 
 pub struct Sigkey {
-    pub X: SignatureGroup,
-    // TODO: y is probably not needed
-    y: Vec<FieldElement>,
+    pub X: SignatureGroup
 }
 
 #[derive(Clone, Debug)]
@@ -36,18 +34,17 @@ pub fn keygen(count_messages: usize, label: &[u8]) -> (Sigkey, Verkey) {
     let g = SignatureGroup::from_msg_hash(&[label, " : g".as_bytes()].concat());
     let g_tilde = OtherGroup::from_msg_hash(&[label, " : g_tilde".as_bytes()].concat());
     let x = FieldElement::random();
-    let mut y = vec![];
     let mut Y = vec![];
     let mut Y_tilde = vec![];
     let X = &g * &x;
     let X_tilde = &g_tilde * &x;
     for i in 0..count_messages {
-        y.push(FieldElement::random());
-        Y.push(&g * &y[i]);
-        Y_tilde.push(&g_tilde * &y[i]);
+        let y = FieldElement::random();
+        Y.push(&g * &y);
+        Y_tilde.push(&g_tilde * &y);
     }
     (
-        Sigkey { X, y },
+        Sigkey { X },
         Verkey {
             g,
             g_tilde,
