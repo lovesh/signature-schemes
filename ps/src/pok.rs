@@ -10,6 +10,17 @@ use amcl_wrapper::group_elem_g1::{G1Vector, G1};
 use amcl_wrapper::group_elem_g2::{G2Vector, G2};
 use std::collections::{HashMap, HashSet};
 
+// TODO: Refactor: Create state machine like objects.
+// `ProverCommitting` will contains vectors of generators and random values.
+// `ProverCommitting` has a `commit` method that optionally takes a value as blinding, if not provided, it creates its own.
+// `ProverCommitting` has a `finish` method that results in creation of `ProverCommitted` object after consuming `ProverCommitting`
+// `ProverCommitted` marks the end commitment phase and generates the final commitment.
+// `ProverCommitted` has a method to generate the challenge by hashing all commitments. It is optional
+// to use this method as the challenge may come from a super-protocol or from verifier.
+// `ProverCommitted` has a method to generate responses. It takes the secrets and the challenge to generate responses.
+// During response generation `ProverCommitted` is consumed to create `Proof` object containing the commitments, challenge and responses.
+// `Proof` can then be verified by the verifier.
+
 macro_rules! impl_PoK_VC {
     ( $PoK_VC:ident, $group_element:ident, $group_element_vec:ident ) => {
         /// Proof of knowledge of messages in a vector commitment.
@@ -21,6 +32,8 @@ macro_rules! impl_PoK_VC {
         }
 
         impl $PoK_VC {
+            /// For each element in `bases`, generate a new random element `r` and compute `bases[i]^r` and add all such products.
+            /// Uses multi-exponentiation.
             pub fn commit(
                 bases: &[$group_element],
                 exponents: &[FieldElement],
@@ -45,7 +58,7 @@ macro_rules! impl_PoK_VC {
                 })
             }
 
-            // This step will be done by the main protocol is this PoK is a sub-protocol
+            /// This step will be done by the main protocol for which this PoK is a sub-protocol
             pub fn hash_for_challenge(
                 bases: &[$group_element],
                 commitment: &$group_element,
@@ -85,7 +98,7 @@ macro_rules! impl_PoK_VC {
                 }
                 // bases[0]^responses[0] * bases[0]^responses[0] * ... bases[i]^responses[i] * commitment^challenge == random_commitment
                 // =>
-                // bases[0]^responses[0] * bases[0]^responses[0] * ... bases[i]^responses[i] * commitment^challenge * random_commitment^-1== 1
+                // bases[0]^responses[0] * bases[0]^responses[0] * ... bases[i]^responses[i] * commitment^challenge * random_commitment^-1 == 1
                 let mut points = $group_element_vec::with_capacity(bases.len() + 2);
                 let mut scalars = FieldElementVector::with_capacity(bases.len() + 2);
                 for i in 0..bases.len() {
@@ -237,6 +250,7 @@ mod tests {
 
     #[test]
     fn test_PoK_VC() {
+        // Proof of knowledge of messages and randomness in vector commitment.
         let n = 5;
         macro_rules! test_PoK_VC {
             ( $PoK_VC:ident, $group_element:ident, $group_element_vec:ident ) => {
