@@ -4,8 +4,8 @@ use crate::keys::{Sigkey, Verkey};
 use crate::errors::PSError;
 use amcl_wrapper::field_elem::{FieldElement, FieldElementVector};
 use amcl_wrapper::group_elem::GroupElement;
-use amcl_wrapper::extension_field_gt::GT;
 
+#[derive(Clone, Debug)]
 pub struct Signature {
     pub sigma_1: SignatureGroup,
     pub sigma_2: SignatureGroup,
@@ -73,10 +73,9 @@ impl Signature {
         // pr = X_tilde * Y_tilde[0]^messages[0] * Y_tilde[1]^messages[1] * .... Y_tilde[i]^messages[i]
         let pr = points.multi_scalar_mul_var_time(&scalars).unwrap();
         // check e(sigma_1, pr) == e(sigma_2, g_tilde) => e(sigma_1, pr) * e(sigma_2, g_tilde)^-1 == 1
-        // => e(sigma_1, pr) * e(sigma_2, -g_tilde) == 1
         let neg_g_tilde = verkey.g_tilde.negation();
         let res = ate_2_pairing(&self.sigma_1, &pr, &self.sigma_2, &neg_g_tilde);
-        Ok(res == GT::one())
+        Ok(res.is_one())
     }
 
     /// Once signature on committed attributes (blind signature) is received, the signature needs to be unblinded.
@@ -88,7 +87,7 @@ impl Signature {
         Self { sigma_1, sigma_2}
     }
 
-    fn check_verkey_and_messages_compat(messages: &[FieldElement], verkey: &Verkey) -> Result<(), PSError> {
+    pub fn check_verkey_and_messages_compat(messages: &[FieldElement], verkey: &Verkey) -> Result<(), PSError> {
         verkey.validate()?;
         if messages.len() != verkey.Y.len() {
             return Err(PSError::UnsupportedNoOfMessages { expected: messages.len(),  given: verkey.Y.len() });

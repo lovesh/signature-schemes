@@ -10,6 +10,7 @@ pub struct Sigkey {
     y: Vec<FieldElement>
 }
 
+#[derive(Clone, Debug)]
 pub struct Verkey {
     pub g: SignatureGroup,
     pub g_tilde: OtherGroup,
