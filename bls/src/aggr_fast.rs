@@ -1,12 +1,11 @@
 use amcl_wrapper::errors::SerzDeserzError;
+use amcl_wrapper::extension_field_gt::GT;
 use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g1::G1;
 use amcl_wrapper::group_elem_g2::G2;
-use amcl_wrapper::extension_field_gt::GT;
 
-use super::common::{SigKey, VerKey, Keypair};
+use super::common::{Keypair, SigKey, VerKey};
 use super::simple::Signature;
-
 
 // This is an older but FASTER way of doing BLS signature aggregation but it IS VULNERABLE to rogue
 // public key attack. Use the proof of possession before trusting a new Verkey.
@@ -20,7 +19,7 @@ pub fn verify_proof_of_possession(proof: &Signature, verkey: &VerKey) -> bool {
 }
 
 pub struct AggregatedVerKeyFast {
-    pub point: G2
+    pub point: G2,
 }
 
 impl AggregatedVerKeyFast {
@@ -42,7 +41,7 @@ impl AggregatedVerKeyFast {
 }
 
 pub struct AggregatedSignatureFast {
-    pub point: G1
+    pub point: G1,
 }
 
 impl AggregatedSignatureFast {
@@ -51,9 +50,7 @@ impl AggregatedSignatureFast {
         for s in sigs {
             asig += s.point;
         }
-        AggregatedSignatureFast {
-            point: asig
-        }
+        AggregatedSignatureFast { point: asig }
     }
 
     pub fn verify(&self, msg: &[u8], ver_keys: Vec<&VerKey>) -> bool {
@@ -76,7 +73,12 @@ impl AggregatedSignatureFast {
         // Check that e(self.point, G2::generator()) == e(msg_hash_point, avk.point)
         // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, G2::generator())^-1 == 1
         // or e(msg_hash_point, avk.point) * e(self.point, -G2::generator()) == 1
-        let e = GT::ate_2_pairing(&self.point, &G2::generator().negation(), &msg_hash_point, &avk.point);
+        let e = GT::ate_2_pairing(
+            &self.point,
+            &G2::generator().negation(),
+            &msg_hash_point,
+            &avk.point,
+        );
         e.is_one()
     }
 
@@ -159,7 +161,9 @@ mod tests {
         let keypair2 = Keypair::new(None);
         let msg = "Small msg".as_bytes();
 
-        let asig = AggregatedSignatureFast { point: G1::identity() };
+        let asig = AggregatedSignatureFast {
+            point: G1::identity(),
+        };
         let vks: Vec<&VerKey> = vec![&keypair1.ver_key, &keypair2.ver_key];
         assert_eq!(asig.verify(&msg, vks), false);
     }

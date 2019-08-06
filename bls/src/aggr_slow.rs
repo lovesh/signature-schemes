@@ -1,27 +1,29 @@
 use amcl_wrapper::errors::SerzDeserzError;
+use amcl_wrapper::extension_field_gt::GT;
 use amcl_wrapper::field_elem::FieldElement;
 use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g1::G1;
 use amcl_wrapper::group_elem_g2::G2;
-use amcl_wrapper::extension_field_gt::GT;
 
-use super::common::{VerKey, Keypair};
+use super::common::{Keypair, VerKey};
 use super::simple::Signature;
-
 
 // This is a newer but SLOWER way of doing BLS signature aggregation. This is NOT VULNERABLE to
 // rogue public key attack so does not need proof of possession.
 
 #[derive(Clone)]
 pub struct AggregatedVerKey {
-    pub point: G2
+    pub point: G2,
 }
 
 impl AggregatedVerKey {
     // Hashes a verkey with all other verkeys using a Hash function `H:{0, 1}* -> Z_q`
     // Takes a verkey `vk_i` and all verkeys `vk_1, vk_2,...vk_n` (including `vk_i`) and calculates
     // `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
-    pub fn hashed_verkey_for_aggregation(ver_key: &VerKey, all_ver_keys: &Vec<&VerKey>) -> FieldElement {
+    pub fn hashed_verkey_for_aggregation(
+        ver_key: &VerKey,
+        all_ver_keys: &Vec<&VerKey>,
+    ) -> FieldElement {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut res_vec: Vec<u8> = Vec::new();
 
@@ -66,7 +68,7 @@ impl AggregatedVerKey {
 
 #[derive(Clone)]
 pub struct AggregatedSignature {
-    pub point: G1
+    pub point: G1,
 }
 
 impl AggregatedSignature {
@@ -77,7 +79,8 @@ impl AggregatedSignature {
     // Add all `a_si`
     pub fn new(sigs_and_ver_keys: Vec<(&Signature, &VerKey)>) -> Self {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
-        let all_ver_keys: Vec<&VerKey> = sigs_and_ver_keys.iter().map(|(_, vk)| vk.clone()).collect();
+        let all_ver_keys: Vec<&VerKey> =
+            sigs_and_ver_keys.iter().map(|(_, vk)| vk.clone()).collect();
         let mut sigs: Vec<G1> = Vec::new();
         for (sig, mut vk) in sigs_and_ver_keys {
             let h = AggregatedVerKey::hashed_verkey_for_aggregation(&mut vk, &all_ver_keys);
@@ -90,9 +93,7 @@ impl AggregatedSignature {
         for s in sigs {
             asig += s;
         }
-        AggregatedSignature {
-            point: asig
-        }
+        AggregatedSignature { point: asig }
     }
 
     pub fn verify(&self, msg: &[u8], ver_keys: Vec<&VerKey>) -> bool {
@@ -103,7 +104,7 @@ impl AggregatedSignature {
     // For verifying multiple aggregate signatures from the same signers,
     // an aggregated verkey should be created once and then used for each signature verification
     pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKey) -> bool {
-//        if !self.is_valid_point() {
+        //        if !self.is_valid_point() {
         if self.point.is_identity() {
             println!("Signature point at infinity");
             return false;
@@ -115,7 +116,12 @@ impl AggregatedSignature {
         // Check that e(self.point, G2::generator()) == e(msg_hash_point, avk.point)
         // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, G2::generator())^-1 == 1
         // or e(msg_hash_point, avk.point) * e(self.point, -G2::generator()) == 1
-        let e = GT::ate_2_pairing(&self.point, &G2::generator().negation(), &msg_hash_point, &avk.point);
+        let e = GT::ate_2_pairing(
+            &self.point,
+            &G2::generator().negation(),
+            &msg_hash_point,
+            &avk.point,
+        );
         e.is_one()
     }
 
@@ -176,7 +182,8 @@ mod tests {
 
             let vks_1: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let vks_2: Vec<&VerKey> = vks.iter().map(|v| v).collect();
-            let sigs_and_ver_keys: Vec<(&Signature, &VerKey)> = sigs_and_ver_keys.iter().map(|(s, v)| (s, v)).collect();
+            let sigs_and_ver_keys: Vec<(&Signature, &VerKey)> =
+                sigs_and_ver_keys.iter().map(|(s, v)| (s, v)).collect();
             let mut asig = AggregatedSignature::new(sigs_and_ver_keys);
             assert!(asig.verify(&b, vks_1));
 
@@ -201,7 +208,9 @@ mod tests {
         let keypair2 = Keypair::new(None);
         let msg = "Small msg".as_bytes();
 
-        let asig = AggregatedSignature { point: G1::identity() };
+        let asig = AggregatedSignature {
+            point: G1::identity(),
+        };
         let vks: Vec<&VerKey> = vec![&keypair1.ver_key, &keypair2.ver_key];
         assert_eq!(asig.verify(&msg, vks), false);
     }

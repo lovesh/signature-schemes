@@ -1,13 +1,13 @@
 use amcl_wrapper::field_elem::FieldElement;
 use amcl_wrapper::group_elem::GroupElement;
 
-use crate::{SignatureGroup, OtherGroup};
 use crate::errors::PSError;
+use crate::{OtherGroup, SignatureGroup};
 
 pub struct Sigkey {
     pub X: SignatureGroup,
     // TODO: y is probably not needed
-    y: Vec<FieldElement>
+    y: Vec<FieldElement>,
 }
 
 #[derive(Clone, Debug)]
@@ -20,9 +20,12 @@ pub struct Verkey {
 }
 
 impl Verkey {
-    pub fn validate(&self) -> Result<(),  PSError> {
+    pub fn validate(&self) -> Result<(), PSError> {
         if self.Y.len() != self.Y_tilde.len() {
-            return Err(PSError::InvalidVerkey { y: self.Y.len(),  y_tilde: self.Y_tilde.len()});
+            return Err(PSError::InvalidVerkey {
+                y: self.Y.len(),
+                y_tilde: self.Y_tilde.len(),
+            });
         }
         Ok(())
     }
@@ -45,7 +48,13 @@ pub fn keygen(count_messages: usize, label: &[u8]) -> (Sigkey, Verkey) {
     }
     (
         Sigkey { X, y },
-        Verkey { g, g_tilde, X_tilde, Y, Y_tilde }
+        Verkey {
+            g,
+            g_tilde,
+            X_tilde,
+            Y,
+            Y_tilde,
+        },
     )
 }
 

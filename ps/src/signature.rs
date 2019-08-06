@@ -1,7 +1,7 @@
 use crate::amcl_wrapper::group_elem::GroupElementVector;
-use crate::{SignatureGroup, SignatureGroupVec, OtherGroup, OtherGroupVec, ate_2_pairing};
-use crate::keys::{Sigkey, Verkey};
 use crate::errors::PSError;
+use crate::keys::{Sigkey, Verkey};
+use crate::{ate_2_pairing, OtherGroup, OtherGroupVec, SignatureGroup, SignatureGroupVec};
 use amcl_wrapper::field_elem::{FieldElement, FieldElementVector};
 use amcl_wrapper::group_elem::GroupElement;
 
@@ -14,7 +14,11 @@ pub struct Signature {
 /// Section  6.1 of paper
 impl Signature {
     /// No committed messages. All messages known to signer.
-    pub fn new(messages: &[FieldElement], sigkey: &Sigkey, verkey: &Verkey) -> Result<Self, PSError> {
+    pub fn new(
+        messages: &[FieldElement],
+        sigkey: &Sigkey,
+        verkey: &Verkey,
+    ) -> Result<Self, PSError> {
         // TODO: Take PRNG as argument. This will allow deterministic signatures as well
         Self::check_verkey_and_messages_compat(messages, verkey)?;
         let u = FieldElement::random();
@@ -29,17 +33,25 @@ impl Signature {
         }
         // TODO: Remove unwrap by accommodating wrapper's error in PSError
         let sigma_2 = points.multi_scalar_mul_const_time(&scalars).unwrap() * &u;
-        Ok( Signature { sigma_1, sigma_2 } )
+        Ok(Signature { sigma_1, sigma_2 })
     }
 
     /// 1 or more messages are captured in a commitment `commitment`. The remaining known messages are in `messages`.
     /// This is a blind signature.
-    pub fn new_with_committed_attributes(commitment: &SignatureGroup, messages: &[FieldElement], sigkey: &Sigkey, verkey: &Verkey) -> Result<Self, PSError> {
+    pub fn new_with_committed_attributes(
+        commitment: &SignatureGroup,
+        messages: &[FieldElement],
+        sigkey: &Sigkey,
+        verkey: &Verkey,
+    ) -> Result<Self, PSError> {
         verkey.validate()?;
         // There should be commitment to atleast one message
         if messages.len() >= verkey.Y.len() {
             // TODO: Use a different error
-            return Err(PSError::UnsupportedNoOfMessages { expected: messages.len(),  given: verkey.Y.len() });
+            return Err(PSError::UnsupportedNoOfMessages {
+                expected: messages.len(),
+                given: verkey.Y.len(),
+            });
         }
 
         let u = FieldElement::random();
@@ -53,10 +65,10 @@ impl Signature {
         let diff = (verkey.Y.len() - messages.len());
         for i in 0..messages.len() {
             scalars.push(messages[i].clone());
-            points.push(verkey.Y[diff+i].clone());
+            points.push(verkey.Y[diff + i].clone());
         }
         let sigma_2 = points.multi_scalar_mul_const_time(&scalars).unwrap() * &u;
-        Ok( Signature { sigma_1, sigma_2 } )
+        Ok(Signature { sigma_1, sigma_2 })
     }
 
     /// Verify a signature. During proof of knowledge also, this method is used after extending the verkey
@@ -84,13 +96,19 @@ impl Signature {
         let sigma_1 = self.sigma_1.clone();
         let sigma_1_t = &sigma_1 * blinding;
         let sigma_2 = &self.sigma_2 - sigma_1_t;
-        Self { sigma_1, sigma_2}
+        Self { sigma_1, sigma_2 }
     }
 
-    pub fn check_verkey_and_messages_compat(messages: &[FieldElement], verkey: &Verkey) -> Result<(), PSError> {
+    pub fn check_verkey_and_messages_compat(
+        messages: &[FieldElement],
+        verkey: &Verkey,
+    ) -> Result<(), PSError> {
         verkey.validate()?;
         if messages.len() != verkey.Y.len() {
-            return Err(PSError::UnsupportedNoOfMessages { expected: messages.len(),  given: verkey.Y.len() });
+            return Err(PSError::UnsupportedNoOfMessages {
+                expected: messages.len(),
+                given: verkey.Y.len(),
+            });
         }
         Ok(())
     }
@@ -100,8 +118,8 @@ impl Signature {
 mod tests {
     use super::*;
     // For benchmarking
-    use std::time::{Duration, Instant};
     use crate::keys::keygen;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn test_signature_all_known_messages() {
@@ -126,7 +144,8 @@ mod tests {
             // commitment = Y[0]^msg * g^blinding
             let comm = (&vk.Y[0] * &msg) + (&vk.g * &blinding);
 
-            let sig_blinded = Signature::new_with_committed_attributes(&comm, &[], &sk, &vk).unwrap();
+            let sig_blinded =
+                Signature::new_with_committed_attributes(&comm, &[], &sk, &vk).unwrap();
             let sig_unblinded = sig_blinded.get_unblinded_signature(&blinding);
             assert!(sig_unblinded.verify(&[msg], &vk).unwrap());
         }
@@ -146,7 +165,8 @@ mod tests {
                 comm += (&vk.Y[i] * &msgs[i]);
             }
             comm += (&vk.g * &blinding);
-            let sig_blinded = Signature::new_with_committed_attributes(&comm, &[], &sk, &vk).unwrap();
+            let sig_blinded =
+                Signature::new_with_committed_attributes(&comm, &[], &sk, &vk).unwrap();
             let sig_unblinded = sig_blinded.get_unblinded_signature(&blinding);
             assert!(sig_unblinded.verify(msgs.as_slice(), &vk).unwrap());
         }
@@ -168,7 +188,13 @@ mod tests {
             }
             comm += (&vk.g * &blinding);
 
-            let sig_blinded = Signature::new_with_committed_attributes(&comm, &msgs.as_slice()[committed_msgs..count_msgs], &sk, &vk).unwrap();
+            let sig_blinded = Signature::new_with_committed_attributes(
+                &comm,
+                &msgs.as_slice()[committed_msgs..count_msgs],
+                &sk,
+                &vk,
+            )
+            .unwrap();
             let sig_unblinded = sig_blinded.get_unblinded_signature(&blinding);
             assert!(sig_unblinded.verify(msgs.as_slice(), &vk).unwrap());
         }

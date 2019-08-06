@@ -7,18 +7,18 @@ use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g2::G2;
 
 pub struct SigKey {
-    pub x: FieldElement
+    pub x: FieldElement,
 }
 
 impl SigKey {
     pub fn new(rng: Option<EntropyRng>) -> Self {
         match rng {
             Some(mut r) => SigKey {
-                x: FieldElement::random_using_rng(&mut r)
+                x: FieldElement::random_using_rng(&mut r),
             },
             None => SigKey {
                 x: FieldElement::random(),
-            }
+            },
         }
     }
 
@@ -41,13 +41,13 @@ impl From<Vec<u8>> for SigKey {
 }*/
 
 pub struct VerKey {
-    pub point: G2
+    pub point: G2,
 }
 
 impl Clone for VerKey {
     fn clone(&self) -> VerKey {
         VerKey {
-            point: self.point.clone()
+            point: self.point.clone(),
         }
     }
 }
@@ -84,17 +84,19 @@ impl From<VerKey> for Vec<u8> {
 
 pub struct Keypair {
     pub sig_key: SigKey,
-    pub ver_key: VerKey
+    pub ver_key: VerKey,
 }
 
 impl Keypair {
     pub fn new(rng: Option<EntropyRng>) -> Self {
         let sk = SigKey::new(rng);
         let vk = VerKey::from_sigkey(&sk);
-        Keypair { sig_key: sk, ver_key: vk }
+        Keypair {
+            sig_key: sk,
+            ver_key: vk,
+        }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

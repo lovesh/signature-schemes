@@ -1,12 +1,11 @@
 use amcl_wrapper::errors::SerzDeserzError;
+use amcl_wrapper::extension_field_gt::GT;
 use amcl_wrapper::field_elem::FieldElement;
 use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g1::G1;
 use amcl_wrapper::group_elem_g2::G2;
-use amcl_wrapper::extension_field_gt::GT;
 
-use super::common::{SigKey, VerKey, Keypair};
-
+use super::common::{Keypair, SigKey, VerKey};
 
 pub struct Signature {
     pub point: G1,
@@ -15,7 +14,7 @@ pub struct Signature {
 impl Clone for Signature {
     fn clone(&self) -> Signature {
         Signature {
-            point: self.point.clone()
+            point: self.point.clone(),
         }
     }
 }
@@ -107,7 +106,9 @@ mod tests {
         let vk = keypair.ver_key;
 
         let msg = "Small msg".as_bytes();
-        let sig = Signature { point: G1::identity() };
+        let sig = Signature {
+            point: G1::identity(),
+        };
         assert_eq!(sig.verify(&msg, &vk), false);
     }
 }

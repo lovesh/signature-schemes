@@ -1,10 +1,10 @@
-use amcl_wrapper::field_elem::{FieldElementVector, FieldElement};
+use amcl_wrapper::field_elem::{FieldElement, FieldElementVector};
 use amcl_wrapper::group_elem::{GroupElement, GroupElementVector};
-use ps::signature::Signature;
 use ps::keys::keygen;
 use ps::pok::*;
-use ps::{SignatureGroup, OtherGroup, OtherGroupVec};
-use std::collections::{HashSet, HashMap};
+use ps::signature::Signature;
+use ps::{OtherGroup, OtherGroupVec, SignatureGroup};
+use std::collections::{HashMap, HashSet};
 
 #[test]
 fn test_scenario_1() {
@@ -39,16 +39,33 @@ fn test_scenario_1() {
         let pok = PoKVCSignatureGroup::commit(&bases, &hidden_msgs).unwrap();
 
         // Note: The challenge may come from the main protocol
-        let chal = PoKVCSignatureGroup::hash_for_challenge(bases.as_slice(), &comm, &pok.random_commitment);
+        let chal = PoKVCSignatureGroup::hash_for_challenge(
+            bases.as_slice(),
+            &comm,
+            &pok.random_commitment,
+        );
 
         let responses = pok.gen_response(&chal);
 
         // Signer verifies the proof of knowledge.
-        assert!(PoKVCSignatureGroup::verify(bases.as_slice(), &comm, &pok.random_commitment, &chal, &responses).unwrap());
+        assert!(PoKVCSignatureGroup::verify(
+            bases.as_slice(),
+            &comm,
+            &pok.random_commitment,
+            &chal,
+            &responses
+        )
+        .unwrap());
     }
 
     // Get signature, unblind it and then verify.
-    let sig_blinded = Signature::new_with_committed_attributes(&comm, &msgs.as_slice()[committed_msgs..count_msgs], &sk, &vk).unwrap();
+    let sig_blinded = Signature::new_with_committed_attributes(
+        &comm,
+        &msgs.as_slice()[committed_msgs..count_msgs],
+        &sk,
+        &vk,
+    )
+    .unwrap();
     let sig_unblinded = sig_blinded.get_unblinded_signature(&blinding);
     assert!(sig_unblinded.verify(msgs.as_slice(), &vk).unwrap());
 
@@ -63,13 +80,23 @@ fn test_scenario_1() {
     bases.push(vk.g_tilde.clone());
     for i in 0..vk.Y_tilde.len() {
         if revealed_msg_indices.contains(&i) {
-            continue
+            continue;
         }
         bases.push(vk.Y_tilde[i].clone());
     }
 
-    let pok = PoKOfSignature::init(&sig_unblinded, &vk, msgs.as_slice(), revealed_msg_indices.clone()).unwrap();
-    let chal = PoKVCOtherGroup::hash_for_challenge(bases.as_slice(), &pok.J, &pok.pok_vc.random_commitment);
+    let pok = PoKOfSignature::init(
+        &sig_unblinded,
+        &vk,
+        msgs.as_slice(),
+        revealed_msg_indices.clone(),
+    )
+    .unwrap();
+    let chal = PoKVCOtherGroup::hash_for_challenge(
+        bases.as_slice(),
+        &pok.J,
+        &pok.pok_vc.random_commitment,
+    );
 
     let responses = pok.gen_response(&chal);
 
@@ -77,5 +104,14 @@ fn test_scenario_1() {
     for i in &revealed_msg_indices {
         revealed_msgs.insert(i.clone(), msgs[*i].clone());
     }
-    assert!(PoKOfSignature::verify(&vk, revealed_msgs.clone(), &pok.sig, &pok.J, &pok.pok_vc.random_commitment, &chal, &responses).unwrap());
+    assert!(PoKOfSignature::verify(
+        &vk,
+        revealed_msgs.clone(),
+        &pok.sig,
+        &pok.J,
+        &pok.pok_vc.random_commitment,
+        &chal,
+        &responses
+    )
+    .unwrap());
 }

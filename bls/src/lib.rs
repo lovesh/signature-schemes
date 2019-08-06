@@ -14,7 +14,7 @@ extern crate amcl_wrapper;
 #[macro_use]
 extern crate log;
 
+pub mod aggr_fast;
+pub mod aggr_slow;
 pub mod common;
 pub mod simple;
-pub mod aggr_slow;
-pub mod aggr_fast;
