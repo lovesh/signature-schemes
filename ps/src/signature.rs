@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_signature_single_committed_message() {
-        for i in 0..10 {
+        for _ in 0..10 {
             let count_msgs = 1;
             let (sk, vk) = keygen(count_msgs, "test".as_bytes());
             let msg = FieldElement::random();
