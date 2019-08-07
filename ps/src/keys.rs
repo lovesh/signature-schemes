@@ -5,7 +5,7 @@ use crate::errors::PSError;
 use crate::{OtherGroup, SignatureGroup};
 
 pub struct Sigkey {
-    pub X: SignatureGroup
+    pub X: SignatureGroup,
 }
 
 #[derive(Clone, Debug)]

@@ -14,12 +14,166 @@ use std::collections::{HashMap, HashSet};
 // `ProverCommitting` will contains vectors of generators and random values.
 // `ProverCommitting` has a `commit` method that optionally takes a value as blinding, if not provided, it creates its own.
 // `ProverCommitting` has a `finish` method that results in creation of `ProverCommitted` object after consuming `ProverCommitting`
-// `ProverCommitted` marks the end commitment phase and generates the final commitment.
-// `ProverCommitted` has a method to generate the challenge by hashing all commitments. It is optional
-// to use this method as the challenge may come from a super-protocol or from verifier.
+// `ProverCommitted` marks the end of commitment phase and has the final commitment.
+// `ProverCommitted` has a method to generate the challenge by hashing all generators and commitment. It is optional
+// to use this method as the challenge may come from a super-protocol or from verifier. It takes a vector of bytes that it concatenates with challenge
 // `ProverCommitted` has a method to generate responses. It takes the secrets and the challenge to generate responses.
-// During response generation `ProverCommitted` is consumed to create `Proof` object containing the commitments, challenge and responses.
+// During response generation `ProverCommitted` is consumed to create `Proof` object containing the commitments and responses.
 // `Proof` can then be verified by the verifier.
+
+/*pub struct ProverCommitting<'a, T: GroupElement> {
+    gens: Vec<&'a T>,
+    blindings: Vec<FieldElement>,
+}
+
+pub struct ProverCommitted<'a, T: GroupElement> {
+    gens: Vec<&'a T>,
+    blindings: Vec<FieldElement>,
+    commitment: T
+}
+
+impl<'a, T> ProverCommitting<'a, T> where T: GroupElement {
+    pub fn new() -> Self {
+        Self {
+            gens: vec![],
+            blindings: vec![],
+        }
+    }
+
+    pub fn commit(&mut self, gen: &'a T, blinding: Option<FieldElement>) -> usize {
+        let blinding = match blinding {
+            Some(b) => b,
+            None => FieldElement::random()
+        };
+        let idx = self.gens.len();
+        self.gens.push(gen);
+        self.blindings.push(blinding);
+        idx
+    }
+
+    pub fn finish(self) -> ProverCommitted<'a, T> {
+        // XXX: Need multi-scalar multiplication to be implemented for GroupElementVector.
+        // XXX: Also implement operator overloading for GroupElement.
+        unimplemented!()
+    }
+
+    pub fn get_index(&self, idx: usize) -> Result<(&'a T, &FieldElement), PSError> {
+        if idx >= self.gens.len() {
+            return Err(PSError::GeneralError { msg: format!("index {} greater than size {}", idx, self.gens.len()) });
+        }
+        Ok((self.gens[idx], &self.blindings[idx]))
+    }
+}*/
+
+macro_rules! impl_PoK_VC_1 {
+    ( $prover_committing:ident, $prover_committed:ident, $proof:ident, $group_element:ident, $group_element_vec:ident ) => {
+
+        pub struct $prover_committing {
+            gens: $group_element_vec,
+            blindings: FieldElementVector,
+        }
+
+        pub struct $prover_committed {
+            gens: $group_element_vec,
+            blindings: FieldElementVector,
+            commitment: $group_element,
+        }
+
+        pub struct $proof {
+            commitment: $group_element,
+            responses: FieldElementVector,
+        }
+
+        impl $prover_committing {
+            pub fn new() -> Self {
+                Self {
+                    gens: $group_element_vec::new(0),
+                    blindings: FieldElementVector::new(0),
+                }
+            }
+
+            pub fn commit(&mut self, gen: &$group_element, blinding: Option<&FieldElement>) -> usize {
+                let blinding = match blinding {
+                    Some(b) => b.clone(),
+                    None => FieldElement::random(),
+                };
+                let idx = self.gens.len();
+                self.gens.push(gen.clone());
+                self.blindings.push(blinding);
+                idx
+            }
+
+            pub fn finish(self) -> $prover_committed {
+                let commitment = self
+                    .gens
+                    .multi_scalar_mul_const_time(&self.blindings)
+                    .unwrap();
+                $prover_committed {
+                    gens: self.gens,
+                    blindings: self.blindings,
+                    commitment,
+                }
+            }
+
+            pub fn get_index(&self, idx: usize) -> Result<(&$group_element, &FieldElement), PSError> {
+                if idx >= self.gens.len() {
+                    return Err(PSError::GeneralError {
+                        msg: format!("index {} greater than size {}", idx, self.gens.len()),
+                    });
+                }
+                Ok((&self.gens[idx], &self.blindings[idx]))
+            }
+        }
+
+        impl $prover_committed {
+            pub fn generate_challenge(&self, mut extra: Vec<u8>) -> FieldElement {
+                let mut bytes = vec![];
+                for b in self.gens.as_slice() {
+                    bytes.append(&mut b.to_bytes());
+                }
+                bytes.append(&mut self.commitment.to_bytes());
+                bytes.append(&mut extra);
+                FieldElement::from_msg_hash(&bytes)
+            }
+
+            pub fn gen_proof(self, challenge: &FieldElement, secrets: &[FieldElement]) -> Result<$proof, PSError> {
+                if secrets.len() != self.gens.len() {
+                    return Err(PSError::UnequalNoOfBasesExponents {
+                        bases: self.gens.len(),
+                        exponents: secrets.len(),
+                    });
+                }
+                let mut responses = FieldElementVector::with_capacity(self.gens.len());
+                for i in 0..self.gens.len() {
+                    responses.push(&self.blindings[i] - (challenge * &secrets[i]));
+                }
+                Ok(
+                    $proof {
+                        commitment: self.commitment,
+                        responses,
+                    }
+                )
+            }
+        }
+
+        impl $proof {
+            pub fn verify(&self, bases: &[$group_element], commitment: &$group_element, challenge: &FieldElement) -> Result<bool, PSError> {
+                // bases[0]^responses[0] * bases[0]^responses[0] * ... bases[i]^responses[i] * commitment^challenge == random_commitment
+                // =>
+                // bases[0]^responses[0] * bases[0]^responses[0] * ... bases[i]^responses[i] * commitment^challenge * random_commitment^-1 == 1
+                let mut points = $group_element_vec::from(bases);
+                let mut scalars = self.responses.clone();
+                points.push(commitment.clone());
+                scalars.push(challenge.clone());
+                let pr = points.multi_scalar_mul_var_time(&scalars).unwrap() - &self.commitment;
+                Ok(pr.is_identity())
+            }
+        }
+    }
+}
+
+impl_PoK_VC_1!(ProverCommittingSignatureGroup, ProverCommittedSignatureGroup, ProofSignatureGroup, SignatureGroup, SignatureGroupVec);
+impl_PoK_VC_1!(ProverCommittingOtherGroup, ProverCommittedOtherGroup, ProofOtherGroup, OtherGroup, OtherGroupVec);
 
 macro_rules! impl_PoK_VC {
     ( $PoK_VC:ident, $group_element:ident, $group_element_vec:ident ) => {
@@ -450,5 +604,47 @@ mod tests {
             &responses
         )
         .unwrap());
+    }
+
+    #[test]
+    fn test_PoK_VC_1() {
+        // Proof of knowledge of messages and randomness in vector commitment.
+        let n = 5;
+        macro_rules! test_PoK_VC {
+            ( $prover_committing:ident, $prover_committed:ident, $proof:ident, $group_element:ident, $group_element_vec:ident ) => {
+                let mut gens = $group_element_vec::with_capacity(n);
+                let mut secrets = FieldElementVector::with_capacity(n);
+                let mut commiting = $prover_committing::new();
+                for _ in 0..n - 1 {
+                    let g = $group_element::random();
+                    commiting.commit(&g, None);
+                    gens.push(g);
+                    secrets.push(FieldElement::random());
+                }
+
+                // Add one of the blindings externally
+                let g = $group_element::random();
+                let r = FieldElement::random();
+                commiting.commit(&g, Some(&r));
+                let (g_, r_) = commiting.get_index(n - 1).unwrap();
+                assert_eq!(g, *g_);
+                assert_eq!(r, *r_);
+                gens.push(g);
+                secrets.push(FieldElement::random());
+
+                let committed = commiting.finish();
+                let commitment = gens.multi_scalar_mul_const_time(&secrets).unwrap();
+                let challenge = committed.generate_challenge(commitment.to_bytes());
+                let proof = committed.gen_proof(&challenge, secrets.as_slice()).unwrap();
+
+                assert!(proof.verify(gens.as_slice(), &commitment, &challenge).unwrap());
+                // Wrong challenge or commitment fails to verify
+                assert!(!proof.verify(gens.as_slice(), &$group_element::random(), &challenge).unwrap());
+                assert!(!proof.verify(gens.as_slice(), &commitment, &FieldElement::random()).unwrap());
+            };
+        }
+
+        test_PoK_VC!(ProverCommittingSignatureGroup, ProverCommittedSignatureGroup, ProofSignatureGroup, SignatureGroup, SignatureGroupVec);
+        test_PoK_VC!(ProverCommittingOtherGroup, ProverCommittedOtherGroup, ProofOtherGroup, OtherGroup, OtherGroupVec);
     }
 }
