@@ -36,26 +36,19 @@ fn test_scenario_1() {
         hidden_msgs.push(blinding.clone());
 
         // User creates a random commitment, computes challenge and response. The proof of knowledge consists of commitment and responses
-        let pok = PoKVCSignatureGroup::commit(&bases, &hidden_msgs).unwrap();
+        let mut committing = ProverCommittingSignatureGroup::new();
+        for b in &bases {
+            committing.commit(b, None);
+        }
+        let committed = committing.finish();
 
         // Note: The challenge may come from the main protocol
-        let chal = PoKVCSignatureGroup::hash_for_challenge(
-            bases.as_slice(),
-            &comm,
-            &pok.random_commitment,
-        );
+        let chal = committed.gen_challenge(comm.to_bytes());
 
-        let responses = pok.gen_response(&chal);
+        let proof = committed.gen_proof(&chal, hidden_msgs.as_slice()).unwrap();
 
         // Signer verifies the proof of knowledge.
-        assert!(PoKVCSignatureGroup::verify(
-            bases.as_slice(),
-            &comm,
-            &pok.random_commitment,
-            &chal,
-            &responses
-        )
-        .unwrap());
+        assert!(proof.verify(bases.as_slice(), &comm, &chal).unwrap());
     }
 
     // Get signature, unblind it and then verify.
@@ -92,26 +85,14 @@ fn test_scenario_1() {
         revealed_msg_indices.clone(),
     )
     .unwrap();
-    let chal = PoKVCOtherGroup::hash_for_challenge(
-        bases.as_slice(),
-        &pok.J,
-        &pok.pok_vc.random_commitment,
-    );
 
-    let responses = pok.gen_response(&chal);
+    let chal = pok.pok_vc.gen_challenge(pok.J.to_bytes());
+
+    let proof = pok.gen_proof(&chal).unwrap();
 
     let mut revealed_msgs = HashMap::new();
     for i in &revealed_msg_indices {
         revealed_msgs.insert(i.clone(), msgs[*i].clone());
     }
-    assert!(PoKOfSignature::verify(
-        &vk,
-        revealed_msgs.clone(),
-        &pok.sig,
-        &pok.J,
-        &pok.pok_vc.random_commitment,
-        &chal,
-        &responses
-    )
-    .unwrap());
+    assert!(proof.verify(&vk, revealed_msgs.clone(), &chal).unwrap());
 }
