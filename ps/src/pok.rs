@@ -93,7 +93,7 @@ macro_rules! impl_PoK_VC {
                 }
             }
 
-            /// generate a new random bliding if None provided
+            /// generate a new random blinding if None provided
             pub fn commit(
                 &mut self,
                 gen: &$group_element,
