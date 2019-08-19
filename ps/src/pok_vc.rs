@@ -59,18 +59,21 @@ macro_rules! impl_PoK_VC {
     ( $ProverCommitting:ident, $ProverCommitted:ident, $Proof:ident, $group_element:ident, $group_element_vec:ident ) => {
         /// Proof of knowledge of messages in a vector commitment.
         /// Commit for each message.
+        #[derive(Clone, Debug, Serialize, Deserialize)]
         pub struct $ProverCommitting {
             gens: $group_element_vec,
             blindings: FieldElementVector,
         }
 
         /// Receive or generate challenge. Compute response and proof
+        #[derive(Clone, Debug, Serialize, Deserialize)]
         pub struct $ProverCommitted {
             gens: $group_element_vec,
             blindings: FieldElementVector,
             commitment: $group_element,
         }
 
+        #[derive(Clone, Debug, Serialize, Deserialize)]
         pub struct $Proof {
             commitment: $group_element,
             responses: FieldElementVector,
@@ -238,13 +241,7 @@ pub(crate) mod tests {
     #[test]
     fn test_PoK_VC_G1() {
         // Proof of knowledge of committed values in a vector commitment. The committment lies in group G1.
-        impl_PoK_VC!(
-            ProverCommittingG1,
-            ProverCommittedG1,
-            ProofG1,
-            G1,
-            G1Vector
-        );
+        impl_PoK_VC!(ProverCommittingG1, ProverCommittedG1, ProofG1, G1, G1Vector);
 
         let n = 5;
         test_PoK_VC!(
@@ -260,13 +257,7 @@ pub(crate) mod tests {
     #[test]
     fn test_PoK_VC_G2() {
         // Proof of knowledge of committed values in a vector commitment. The committment lies in group G2.
-        impl_PoK_VC!(
-            ProverCommittingG2,
-            ProverCommittedG2,
-            ProofG2,
-            G2,
-            G2Vector
-        );
+        impl_PoK_VC!(ProverCommittingG2, ProverCommittedG2, ProofG2, G2, G2Vector);
 
         let n = 5;
         test_PoK_VC!(
