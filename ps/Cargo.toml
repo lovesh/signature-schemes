@@ -19,6 +19,6 @@ default-features = false
 features = ["bls381"]
 
 [features]
-default = ["G2G1"]
+default = ["G1G2"]
 G1G2 = []
 G2G1 = []
