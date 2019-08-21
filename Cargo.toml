@@ -2,5 +2,6 @@
 members = [
     "bls",
     "musig",
-    "ps"
+    "ps",
+    "delg_cred_cdd"
 ]
