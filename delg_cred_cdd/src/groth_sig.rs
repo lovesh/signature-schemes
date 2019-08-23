@@ -1,9 +1,9 @@
-use amcl_wrapper::group_elem::{GroupElement, GroupElementVector};
-use amcl_wrapper::group_elem_g1::{G1, G1Vector, G1LookupTable};
-use amcl_wrapper::group_elem_g2::{G2, G2Vector};
+use crate::errors::{DelgError, DelgResult};
 use amcl_wrapper::extension_field_gt::GT;
 use amcl_wrapper::field_elem::{FieldElement, FieldElementVector};
-use crate::errors::{DelgError, DelgResult};
+use amcl_wrapper::group_elem::{GroupElement, GroupElementVector};
+use amcl_wrapper::group_elem_g1::{G1LookupTable, G1Vector, G1};
+use amcl_wrapper::group_elem_g2::{G2Vector, G2};
 
 /*#[macro_export]
 macro_rules! impl_GrothS {
@@ -61,16 +61,16 @@ pub struct Groth1SetupParams {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth1Sigkey(FieldElement);
+pub struct Groth1Sigkey(pub FieldElement);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth1Verkey(G2);
+pub struct Groth1Verkey(pub G2);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Groth1Sig {
     pub R: G2,
     pub S: G1,
-    pub T: G1Vector
+    pub T: G1Vector,
 }
 
 pub struct GrothS1 {}
@@ -82,10 +82,11 @@ impl GrothS1 {
         let mut y = G1Vector::with_capacity(count_messages);
         for i in 0..count_messages {
             // construct a group element from hashing label||y||i for each i
-            let yi = G1::from_msg_hash(&[label, " : y".as_bytes(), i.to_string().as_bytes()].concat());
+            let yi =
+                G1::from_msg_hash(&[label, " : y".as_bytes(), i.to_string().as_bytes()].concat());
             y.push(yi);
         }
-        Groth1SetupParams { g1, g2, y}
+        Groth1SetupParams { g1, g2, y }
     }
 
     pub fn keygen(setup_params: &Groth1SetupParams) -> (Groth1Sigkey, Groth1Verkey) {
@@ -97,8 +98,12 @@ impl GrothS1 {
 }
 
 impl Groth1Sig {
-    pub fn new(messages: &[G1], sk: &Groth1Sigkey, setup_params: &Groth1SetupParams) -> DelgResult<Self> {
-        if messages.len() != setup_params.y.len() {
+    pub fn new(
+        messages: &[G1],
+        sk: &Groth1Sigkey,
+        setup_params: &Groth1SetupParams,
+    ) -> DelgResult<Self> {
+        if messages.len() > setup_params.y.len() {
             return Err(DelgError::UnsupportedNoOfMessages {
                 expected: setup_params.y.len(),
                 given: messages.len(),
@@ -114,18 +119,27 @@ impl Groth1Sig {
             T.push(&messages[i] + (&setup_params.y[i] * &sk.0));
         }
         T.scale(&r_inv);
-        Ok(Self {R, S, T})
+        Ok(Self { R, S, T })
     }
 
     pub fn rand(&self, r_prime: &FieldElement) -> Self {
         let r_prime_inv = r_prime.inverse();
         let R = &self.R * r_prime;
         let S = &self.S * &r_prime_inv;
-        Self {R, S, T: self.T.scaled_by(&r_prime_inv)}
+        Self {
+            R,
+            S,
+            T: self.T.scaled_by(&r_prime_inv),
+        }
     }
 
-    pub fn verify(&self, messages: &[G1], verkey: &Groth1Verkey, setup_params: &Groth1SetupParams) -> DelgResult<bool> {
-        if messages.len() != setup_params.y.len() {
+    pub fn verify(
+        &self,
+        messages: &[G1],
+        verkey: &Groth1Verkey,
+        setup_params: &Groth1SetupParams,
+    ) -> DelgResult<bool> {
+        if messages.len() > setup_params.y.len() {
             return Err(DelgError::UnsupportedNoOfMessages {
                 expected: setup_params.y.len(),
                 given: messages.len(),
@@ -135,10 +149,10 @@ impl Groth1Sig {
         let e0 = GT::ate_multi_pairing(vec![
             (&setup_params.y[0], &setup_params.g2),
             (&setup_params.g1, &verkey.0),
-            (&negS, &self.R)
+            (&negS, &self.R),
         ]);
         if !e0.is_one() {
-            return Ok(false)
+            return Ok(false);
         }
 
         let negR = self.R.negation();
@@ -146,16 +160,21 @@ impl Groth1Sig {
             let e = GT::ate_multi_pairing(vec![
                 (&messages[i], &setup_params.g2),
                 (&setup_params.y[i], &verkey.0),
-                (&self.T[i], &negR)
+                (&self.T[i], &negR),
             ]);
             if !e.is_one() {
-                return Ok(false)
+                return Ok(false);
             }
         }
         Ok(true)
     }
 
-    pub fn verify_fast(&self, messages: &[G1], verkey: &Groth1Verkey, setup_params: &Groth1SetupParams) -> DelgResult<bool> {
+    pub fn verify_fast(
+        &self,
+        messages: &[G1],
+        verkey: &Groth1Verkey,
+        setup_params: &Groth1SetupParams,
+    ) -> DelgResult<bool> {
         // Verify n pairing checks with a single one.
         // if a verifier had to check that all 3 values a, b and c are 0, he could pick a random value r in {Z_p}* and check that a + b*r + c*r^2 equals 0
         // in a pairing situation if verifier had to check if e(a,b) = 1, e(c, d) = 1 and e(f, g) = 1, pick a random value r in {Z_p}* and check e(a,b) * e(c,d)^r * e(f,g)^{r^2} equals 1
@@ -166,7 +185,7 @@ impl Groth1Sig {
         // e(-S, R)*e(y1, g2)*e(g1, V) * e(m1, g2)^r*e(y1, V)^r*e(T1, -R)^r * e(m2, g2)^{r^2}*e(y2, V)^{r^2}*e(T2, -R)^{r^2} * ... == 1
         // e(-S, R)*e(y1, g2)*e(g1, V) * e(m1^r, g2)*e(y1^r, V)*e(T1^r, -R) * e(m2^{r^2}, g1)*e(y2^{r^2}, V)*e(T2^{r^2}, -R) * ... == 1
 
-        if messages.len() != setup_params.y.len() {
+        if messages.len() > setup_params.y.len() {
             return Err(DelgError::UnsupportedNoOfMessages {
                 expected: setup_params.y.len(),
                 given: messages.len(),
@@ -181,20 +200,20 @@ impl Groth1Sig {
         let mut pairing_elems: Vec<(&G1, &G2)> = vec![
             (&setup_params.y[0], &setup_params.g2),
             (&setup_params.g1, &verkey.0),
-            (&negS, &self.R)
+            (&negS, &self.R),
         ];
 
         let mut temp: Vec<(G1, G1, G1)> = vec![];
         for i in 0..messages.len() {
-            let wnaf = r_vec[i+1].to_wnaf(5);
+            let wnaf = r_vec[i + 1].to_wnaf(5);
             let table_m = G1LookupTable::from(&messages[i]);
             let table_y = G1LookupTable::from(&setup_params.y[i]);
             let table_T = G1LookupTable::from(&self.T[i]);
             temp.push((
                 G1::wnaf_mul(&table_m, &wnaf),
                 G1::wnaf_mul(&table_y, &wnaf),
-                G1::wnaf_mul(&table_T, &wnaf)
-            ) );
+                G1::wnaf_mul(&table_T, &wnaf),
+            ));
         }
 
         for i in 0..messages.len() {
@@ -216,16 +235,16 @@ pub struct Groth2SetupParams {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth2Sigkey(FieldElement);
+pub struct Groth2Sigkey(pub FieldElement);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth2Verkey(G1);
+pub struct Groth2Verkey(pub G1);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Groth2Sig {
     pub R: G1,
     pub S: G2,
-    pub T: G2Vector
+    pub T: G2Vector,
 }
 
 pub struct GrothS2 {}
@@ -237,10 +256,11 @@ impl GrothS2 {
         let mut y = G2Vector::with_capacity(count_messages);
         for i in 0..count_messages {
             // construct a group element from hashing label||y||i for each i
-            let yi = G2::from_msg_hash(&[label, " : y".as_bytes(), i.to_string().as_bytes()].concat());
+            let yi =
+                G2::from_msg_hash(&[label, " : y".as_bytes(), i.to_string().as_bytes()].concat());
             y.push(yi);
         }
-        Groth2SetupParams { g1, g2, y}
+        Groth2SetupParams { g1, g2, y }
     }
 
     pub fn keygen(setup_params: &Groth2SetupParams) -> (Groth2Sigkey, Groth2Verkey) {
@@ -252,8 +272,12 @@ impl GrothS2 {
 }
 
 impl Groth2Sig {
-    pub fn new(messages: &[G2], sk: &Groth2Sigkey, setup_params: &Groth2SetupParams) -> DelgResult<Self> {
-        if messages.len() != setup_params.y.len() {
+    pub fn new(
+        messages: &[G2],
+        sk: &Groth2Sigkey,
+        setup_params: &Groth2SetupParams,
+    ) -> DelgResult<Self> {
+        if messages.len() > setup_params.y.len() {
             return Err(DelgError::UnsupportedNoOfMessages {
                 expected: setup_params.y.len(),
                 given: messages.len(),
@@ -269,18 +293,27 @@ impl Groth2Sig {
             T.push(&messages[i] + (&setup_params.y[i] * &sk.0));
         }
         T.scale(&r_inv);
-        Ok(Self {R, S, T})
+        Ok(Self { R, S, T })
     }
 
     pub fn rand(&self, r_prime: &FieldElement) -> Self {
         let r_prime_inv = r_prime.inverse();
         let R = &self.R * r_prime;
         let S = &self.S * &r_prime_inv;
-        Self {R, S, T: self.T.scaled_by(&r_prime_inv)}
+        Self {
+            R,
+            S,
+            T: self.T.scaled_by(&r_prime_inv),
+        }
     }
 
-    pub fn verify(&self, messages: &[G2], verkey: &Groth2Verkey, setup_params: &Groth2SetupParams) -> DelgResult<bool> {
-        if messages.len() != setup_params.y.len() {
+    pub fn verify(
+        &self,
+        messages: &[G2],
+        verkey: &Groth2Verkey,
+        setup_params: &Groth2SetupParams,
+    ) -> DelgResult<bool> {
+        if messages.len() > setup_params.y.len() {
             return Err(DelgError::UnsupportedNoOfMessages {
                 expected: setup_params.y.len(),
                 given: messages.len(),
@@ -290,26 +323,31 @@ impl Groth2Sig {
         let e0 = GT::ate_multi_pairing(vec![
             (&setup_params.g1, &setup_params.y[0]),
             (&verkey.0, &setup_params.g2),
-            (&negR, &self.S)
+            (&negR, &self.S),
         ]);
         if !e0.is_one() {
-            return Ok(false)
+            return Ok(false);
         }
 
         for i in 0..messages.len() {
             let e = GT::ate_multi_pairing(vec![
                 (&setup_params.g1, &messages[i]),
                 (&verkey.0, &setup_params.y[i]),
-                (&negR, &self.T[i])
+                (&negR, &self.T[i]),
             ]);
             if !e.is_one() {
-                return Ok(false)
+                return Ok(false);
             }
         }
         Ok(true)
     }
 
-    pub fn verify_fast(&self, messages: &[G2], verkey: &Groth2Verkey, setup_params: &Groth2SetupParams) -> DelgResult<bool> {
+    pub fn verify_fast(
+        &self,
+        messages: &[G2],
+        verkey: &Groth2Verkey,
+        setup_params: &Groth2SetupParams,
+    ) -> DelgResult<bool> {
         // Verify n pairing checks with a single one.
         // if a verifier had to check that all 3 values a, b and c are 0, he could pick a random value r in {Z_p}* and check that a + b*r + c*r^2 equals 0
         // in a pairing situation if verifier had to check if e(a,b) = 1, e(c, d) = 1 and e(f, g) = 1, pick a random value r in {Z_p}* and check e(a,b) * e(c,d)^r * e(f,g)^{r^2} equals 1
@@ -320,7 +358,7 @@ impl Groth2Sig {
         // e(-R, S)*e(g1, y1)*e(V, g2) * e(g1, m1)^r*e(V, y1)^r*e(-R, T1)^r * e(g1, m2)^{r^2}*e(V, y2)^{r^2}*e(-R, T2)^{r^2} * ... == 1
         // e(-R, S)*e(g1, y1)*e(V, g2) * e(g1^r, m1)*e(V^r, y1)*e(-R^r, T1) * e(g1^{r^2}, m2)*e(V^{r^2}, y2)*e(-R^{r^2}, T2) * ... == 1
 
-        if messages.len() != setup_params.y.len() {
+        if messages.len() > setup_params.y.len() {
             return Err(DelgError::UnsupportedNoOfMessages {
                 expected: setup_params.y.len(),
                 given: messages.len(),
@@ -334,7 +372,7 @@ impl Groth2Sig {
         let mut pairing_elems: Vec<(&G1, &G2)> = vec![
             (&setup_params.g1, &setup_params.y[0]),
             (&verkey.0, &setup_params.g2),
-            (&negR, &self.S)
+            (&negR, &self.S),
         ];
 
         let mut temp: Vec<(G1, G1, G1)> = vec![];
@@ -342,12 +380,12 @@ impl Groth2Sig {
         let table_vk = G1LookupTable::from(&verkey.0);
         let table_R = G1LookupTable::from(&negR);
         for i in 0..messages.len() {
-            let wnaf = r_vec[i+1].to_wnaf(5);
+            let wnaf = r_vec[i + 1].to_wnaf(5);
             temp.push((
                 G1::wnaf_mul(&table_g1, &wnaf),
                 G1::wnaf_mul(&table_vk, &wnaf),
-                G1::wnaf_mul(&table_R, &wnaf)
-            ) );
+                G1::wnaf_mul(&table_R, &wnaf),
+            ));
         }
 
         for i in 0..messages.len() {
@@ -379,17 +417,21 @@ mod tests {
         let sig = Groth1Sig::new(msgs.as_slice(), &sk, &params).unwrap();
 
         let start = Instant::now();
-        assert!(sig.verify(msgs.as_slice(),&vk, &params).unwrap());
+        assert!(sig.verify(msgs.as_slice(), &vk, &params).unwrap());
         println!("Naive verify takes {:?}", start.elapsed());
 
         let start = Instant::now();
-        assert!(sig.verify_fast(msgs.as_slice(),&vk, &params).unwrap());
+        assert!(sig.verify_fast(msgs.as_slice(), &vk, &params).unwrap());
         println!("Fast verify takes {:?}", start.elapsed());
 
         let r = FieldElement::random();
         let sig_randomized = sig.rand(&r);
-        assert!(sig_randomized.verify(msgs.as_slice(),&vk, &params).unwrap());
-        assert!(sig_randomized.verify_fast(msgs.as_slice(),&vk, &params).unwrap());
+        assert!(sig_randomized
+            .verify(msgs.as_slice(), &vk, &params)
+            .unwrap());
+        assert!(sig_randomized
+            .verify_fast(msgs.as_slice(), &vk, &params)
+            .unwrap());
     }
 
     #[test]
@@ -404,16 +446,20 @@ mod tests {
         let sig = Groth2Sig::new(msgs.as_slice(), &sk, &params).unwrap();
 
         let start = Instant::now();
-        assert!(sig.verify(msgs.as_slice(),&vk, &params).unwrap());
+        assert!(sig.verify(msgs.as_slice(), &vk, &params).unwrap());
         println!("Naive verify takes {:?}", start.elapsed());
 
         let start = Instant::now();
-        assert!(sig.verify_fast(msgs.as_slice(),&vk, &params).unwrap());
+        assert!(sig.verify_fast(msgs.as_slice(), &vk, &params).unwrap());
         println!("Fast verify takes {:?}", start.elapsed());
 
         let r = FieldElement::random();
         let sig_randomized = sig.rand(&r);
-        assert!(sig_randomized.verify(msgs.as_slice(),&vk, &params).unwrap());
-        assert!(sig_randomized.verify_fast(msgs.as_slice(),&vk, &params).unwrap());
+        assert!(sig_randomized
+            .verify(msgs.as_slice(), &vk, &params)
+            .unwrap());
+        assert!(sig_randomized
+            .verify_fast(msgs.as_slice(), &vk, &params)
+            .unwrap());
     }
 }

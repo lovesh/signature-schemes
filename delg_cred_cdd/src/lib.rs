@@ -14,3 +14,4 @@ extern crate serde_derive;
 pub mod errors;
 #[macro_use]
 pub mod groth_sig;
+pub mod issuer;
