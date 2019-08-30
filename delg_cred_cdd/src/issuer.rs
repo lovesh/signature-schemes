@@ -45,12 +45,20 @@ pub struct OddLevelIssuer {
 }
 
 impl CredLinkOdd {
+    pub fn message_count(&self) -> usize {
+        self.messages.len()
+    }
+
     pub fn has_verkey(&self, vk: &OddLevelVerkey) -> bool {
         self.messages[self.messages.len() - 1] == vk.0
     }
 }
 
 impl CredLinkEven {
+    pub fn message_count(&self) -> usize {
+        self.messages.len()
+    }
+
     pub fn has_verkey(&self, vk: &EvenLevelVerkey) -> bool {
         self.messages[self.messages.len() - 1] == vk.0
     }
@@ -75,6 +83,26 @@ impl CredChain {
 
     pub fn size(&self) -> usize {
         self.odd_size() + self.even_size()
+    }
+
+    pub fn get_odd_link(&self, idx: usize) -> DelgResult<&CredLinkOdd> {
+        if self.odd_size() <= idx {
+            return Err(DelgError::NoOddLinkInChainAtGivenIndex {
+                given_index: idx,
+                size: self.odd_size(),
+            });
+        }
+        Ok(&self.odd_links[idx])
+    }
+
+    pub fn get_even_link(&self, idx: usize) -> DelgResult<&CredLinkEven> {
+        if self.even_size() <= idx {
+            return Err(DelgError::NoEvenLinkInChainAtGivenIndex {
+                given_index: idx,
+                size: self.even_size(),
+            });
+        }
+        Ok(&self.even_links[idx])
     }
 
     pub fn extend_with_odd(&mut self, link: CredLinkOdd) -> DelgResult<()> {
@@ -114,8 +142,10 @@ impl CredChain {
         if !link.has_verkey(delegatee_vk) {
             return Err(DelgError::VerkeyNotFoundInDelegationLink {});
         }
+        /*link.signature
+        .verify(link.messages.as_slice(), delegator_vk, setup_params)*/
         link.signature
-            .verify(link.messages.as_slice(), delegator_vk, setup_params)
+            .verify_fast(link.messages.as_slice(), delegator_vk, setup_params)
     }
 
     pub fn verify_last_even_delegation(
@@ -137,10 +167,13 @@ impl CredChain {
         if !link.has_verkey(delegatee_vk) {
             return Err(DelgError::VerkeyNotFoundInDelegationLink {});
         }
+        /*link.signature
+        .verify(link.messages.as_slice(), delegator_vk, setup_params)*/
         link.signature
-            .verify(link.messages.as_slice(), delegator_vk, setup_params)
+            .verify_fast(link.messages.as_slice(), delegator_vk, setup_params)
     }
 
+    // First verkey of even_level_vks is the root issuer's key
     pub fn verify_delegations(
         &self,
         even_level_vks: Vec<&EvenLevelVerkey>,
@@ -165,7 +198,12 @@ impl CredChain {
                 if !link.has_verkey(odd_level_vks[idx]) {
                     return Err(DelgError::VerkeyNotFoundInDelegationLink {});
                 }
-                link.signature.verify(
+                /*link.signature.verify(
+                    link.messages.as_slice(),
+                    even_level_vks[idx],
+                    setup_params_1,
+                )?*/
+                link.signature.verify_fast(
                     link.messages.as_slice(),
                     even_level_vks[idx],
                     setup_params_1,
@@ -181,7 +219,12 @@ impl CredChain {
                 if !link.has_verkey(even_level_vks[i / 2]) {
                     return Err(DelgError::VerkeyNotFoundInDelegationLink {});
                 }
-                link.signature.verify(
+                /*link.signature.verify(
+                    link.messages.as_slice(),
+                    odd_level_vks[(i / 2) - 1],
+                    setup_params_2,
+                )?*/
+                link.signature.verify_fast(
                     link.messages.as_slice(),
                     odd_level_vks[(i / 2) - 1],
                     setup_params_2,

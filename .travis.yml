@@ -12,3 +12,6 @@ script:
   - cd ../ps
   - cargo test --release --no-default-features --features G2G1
   - cargo test --release --no-default-features --features G1G2
+  - cd ../delg_cred_cdd
+    - cargo test --release
+    - cargo test --release

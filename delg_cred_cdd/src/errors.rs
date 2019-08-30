@@ -28,6 +28,27 @@ pub enum DelgError {
 
     #[fail(display = "No even delegation links in the delegation chain")]
     NoEvenLinksInChain {},
+
+    #[fail(
+        display = "Requested odd link at index {} but only {} odd links present",
+        given_index, size
+    )]
+    NoOddLinkInChainAtGivenIndex { given_index: usize, size: usize },
+
+    #[fail(
+        display = "Requested even link at index {} but only {} even links present",
+        given_index, size
+    )]
+    NoEvenLinkInChainAtGivenIndex { given_index: usize, size: usize },
+
+    #[fail(
+        display = "Same no of bases and exponents required. {} bases and {} exponents",
+        bases, exponents
+    )]
+    UnequalNoOfBasesExponents { bases: usize, exponents: usize },
+
+    #[fail(display = "Error with message {:?}", msg)]
+    GeneralError { msg: String },
 }
 
 pub type DelgResult<T> = Result<T, DelgError>;

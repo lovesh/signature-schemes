@@ -119,9 +119,9 @@ macro_rules! impl_PoK_VC {
             pub fn get_index(
                 &self,
                 idx: usize,
-            ) -> Result<(&$group_element, &FieldElement), PSError> {
+            ) -> Result<(&$group_element, &FieldElement), DelgError> {
                 if idx >= self.gens.len() {
-                    return Err(PSError::GeneralError {
+                    return Err(DelgError::GeneralError {
                         msg: format!("index {} greater than size {}", idx, self.gens.len()),
                     });
                 }
@@ -146,9 +146,9 @@ macro_rules! impl_PoK_VC {
                 self,
                 challenge: &FieldElement,
                 secrets: &[FieldElement],
-            ) -> Result<$Proof, PSError> {
+            ) -> Result<$Proof, DelgError> {
                 if secrets.len() != self.gens.len() {
-                    return Err(PSError::UnequalNoOfBasesExponents {
+                    return Err(DelgError::UnequalNoOfBasesExponents {
                         bases: self.gens.len(),
                         exponents: secrets.len(),
                     });
@@ -171,12 +171,12 @@ macro_rules! impl_PoK_VC {
                 bases: &[$group_element],
                 commitment: &$group_element,
                 challenge: &FieldElement,
-            ) -> Result<bool, PSError> {
+            ) -> Result<bool, DelgError> {
                 // bases[0]^responses[0] * bases[0]^responses[0] * ... bases[i]^responses[i] * commitment^challenge == random_commitment
                 // =>
                 // bases[0]^responses[0] * bases[0]^responses[0] * ... bases[i]^responses[i] * commitment^challenge * random_commitment^-1 == 1
                 if bases.len() != self.responses.len() {
-                    return Err(PSError::UnequalNoOfBasesExponents {
+                    return Err(DelgError::UnequalNoOfBasesExponents {
                         bases: bases.len(),
                         exponents: self.responses.len(),
                     });
@@ -238,7 +238,7 @@ macro_rules! test_PoK_VC {
 pub(crate) mod tests {
     use super::*;
     // XXX: Error for VC should be independent of PS
-    use crate::errors::PSError;
+    use crate::errors::DelgError;
     use amcl_wrapper::field_elem::{FieldElement, FieldElementVector};
     use amcl_wrapper::group_elem::{GroupElement, GroupElementVector};
     use amcl_wrapper::group_elem_g1::{G1Vector, G1};

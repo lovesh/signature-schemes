@@ -122,7 +122,7 @@ impl Groth1Sig {
         Ok(Self { R, S, T })
     }
 
-    pub fn rand(&self, r_prime: &FieldElement) -> Self {
+    pub fn randomize(&self, r_prime: &FieldElement) -> Self {
         let r_prime_inv = r_prime.inverse();
         let R = &self.R * r_prime;
         let S = &self.S * &r_prime_inv;
@@ -296,7 +296,7 @@ impl Groth2Sig {
         Ok(Self { R, S, T })
     }
 
-    pub fn rand(&self, r_prime: &FieldElement) -> Self {
+    pub fn randomize(&self, r_prime: &FieldElement) -> Self {
         let r_prime_inv = r_prime.inverse();
         let R = &self.R * r_prime;
         let S = &self.S * &r_prime_inv;
@@ -425,7 +425,7 @@ mod tests {
         println!("Fast verify takes {:?}", start.elapsed());
 
         let r = FieldElement::random();
-        let sig_randomized = sig.rand(&r);
+        let sig_randomized = sig.randomize(&r);
         assert!(sig_randomized
             .verify(msgs.as_slice(), &vk, &params)
             .unwrap());
@@ -454,7 +454,7 @@ mod tests {
         println!("Fast verify takes {:?}", start.elapsed());
 
         let r = FieldElement::random();
-        let sig_randomized = sig.rand(&r);
+        let sig_randomized = sig.randomize(&r);
         assert!(sig_randomized
             .verify(msgs.as_slice(), &vk, &params)
             .unwrap());
