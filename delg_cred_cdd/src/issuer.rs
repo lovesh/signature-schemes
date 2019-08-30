@@ -409,6 +409,7 @@ mod tests {
         let mut chain_1 = CredChain::new();
         chain_1.extend_with_odd(cred_link_1).unwrap();
 
+        let start = Instant::now();
         assert!(chain_1
             .verify_delegations(
                 vec![&l_0_issuer_vk],
@@ -417,6 +418,11 @@ mod tests {
                 &params2
             )
             .unwrap());
+        println!(
+            "Verifying delegation chain of length {} takes {:?}",
+            chain_1.size(),
+            start.elapsed()
+        );
 
         let attributes_2: G2Vector = (0..max_attributes - 1)
             .map(|_| G2::random())
@@ -433,6 +439,7 @@ mod tests {
         let mut chain_2 = chain_1.clone();
         chain_2.extend_with_even(cred_link_2).unwrap();
 
+        let start = Instant::now();
         assert!(chain_2
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk],
@@ -441,6 +448,11 @@ mod tests {
                 &params2
             )
             .unwrap());
+        println!(
+            "Verifying delegation chain of length {} takes {:?}",
+            chain_2.size(),
+            start.elapsed()
+        );
 
         let attributes_3: G1Vector = (0..max_attributes - 1)
             .map(|_| G1::random())
@@ -457,6 +469,7 @@ mod tests {
         let mut chain_3 = chain_2.clone();
         chain_3.extend_with_odd(cred_link_3).unwrap();
 
+        let start = Instant::now();
         assert!(chain_3
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk],
@@ -465,6 +478,11 @@ mod tests {
                 &params2
             )
             .unwrap());
+        println!(
+            "Verifying delegation chain of length {} takes {:?}",
+            chain_3.size(),
+            start.elapsed()
+        );
 
         let attributes_4: G2Vector = (0..max_attributes - 1)
             .map(|_| G2::random())
@@ -481,6 +499,7 @@ mod tests {
         let mut chain_4 = chain_3.clone();
         chain_4.extend_with_even(cred_link_4).unwrap();
 
+        let start = Instant::now();
         assert!(chain_4
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk, &l_4_issuer_vk],
@@ -489,5 +508,10 @@ mod tests {
                 &params2
             )
             .unwrap());
+        println!(
+            "Verifying delegation chain of length {} takes {:?}",
+            chain_4.size(),
+            start.elapsed()
+        );
     }
 }
