@@ -468,6 +468,12 @@ impl<'a> AttributeToken<'a> {
         let groth2_neg_g2 = setup_params_2.g2.negation();
 
         let challenge_neg = challenge.negation();
+        // g1^-c
+        let groth2_g1_c = &setup_params_2.g1 * &challenge_neg;
+        // g2^-c
+        let groth1_g2_c = &setup_params_1.g2 * &challenge_neg;
+        // ipk^-c
+        let ipk_c = &ipk.0 * &challenge_neg;
         // e(y0, g2)^{-c}
         let y0_g2_c = {
             // XXX: Precompute
@@ -476,15 +482,18 @@ impl<'a> AttributeToken<'a> {
         };
         // e(g1, y0)^{-c}
         let g1_y0_c = {
-            // XXX: Precompute
-            let e_1 = GT::ate_pairing(&setup_params_2.g1, &setup_params_2.y[0]);
-            GT::pow(&e_1, &challenge_neg)
+            // XXX: Precompute e(g1, y[0])
+            /*let e_1 = GT::ate_pairing(&setup_params_2.g1, &setup_params_2.y[0]);
+            GT::pow(&e_1, &challenge_neg)*/
+            GT::ate_pairing(&groth2_g1_c, &setup_params_2.y[0])
         };
+
         for i in 1..=L {
             if i % 2 == 1 {
                 // Odd level
                 // XXX: e(y[j], ipk)^-c can be changed to e(y[j], ipk^-c) and ipk^-c can be computed once for all odd levels.
-                // Moreover e(y[j], ipk)^-c can then be used in a multi-pairing.
+                // Then e(y[j], ipk)^-c can then be used in a multi-pairing.
+                // Otherwise precompute e(y[j], ipk) for all j
                 let com_i_s = if i == 1 {
                     // e(resp_s_i, r'_i)
                     let e_1 = GT::ate_pairing(
@@ -519,15 +528,11 @@ impl<'a> AttributeToken<'a> {
                 for j in 0..(attr_count - 1) {
                     if !revealed[i - 1].contains(&j) {
                         if i == 1 {
-                            let e_1 = GT::ate_2_pairing(
-                                &resp.odd_level_resp_t[i / 2][j],
-                                &comm.odd_level_blinded_r[i / 2],
-                                &resp.odd_level_resp_a[i / 2][k],
-                                &groth1_neg_g2,
-                            );
-                            let e_2 = GT::ate_pairing(&setup_params_1.y[j], &ipk.0);
-                            let e_3 = GT::pow(&e_2, &challenge_neg);
-                            com_t.push(GT::mul(&e_1, &e_3));
+                            com_t.push(GT::ate_multi_pairing(vec![
+                                (&resp.odd_level_resp_t[i / 2][j], &comm.odd_level_blinded_r[i / 2]),
+                                (&resp.odd_level_resp_a[i / 2][k], &groth1_neg_g2),
+                                (&setup_params_1.y[j], &ipk_c)
+                            ]));
                         } else {
                             com_t.push(GT::ate_multi_pairing(vec![
                                 (
@@ -544,31 +549,17 @@ impl<'a> AttributeToken<'a> {
                         k += 1;
                     } else {
                         if i == 1 {
-                            let e_1 = GT::ate_pairing(
-                                &resp.odd_level_resp_t[i / 2][j],
-                                &comm.odd_level_blinded_r[i / 2],
-                            );
-                            let e_2 = GT::ate_2_pairing(
-                                &comm.odd_level_revealed_attributes[i / 2][&j],
-                                &setup_params_1.g2,
-                                &setup_params_1.y[j],
-                                &ipk.0,
-                            );
-                            let e_3 = GT::pow(&e_2, &challenge_neg);
-                            com_t.push(GT::mul(&e_1, &e_3));
+                            com_t.push(GT::ate_multi_pairing(vec![
+                                (&resp.odd_level_resp_t[i / 2][j], &comm.odd_level_blinded_r[i / 2]),
+                                (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c),
+                                (&setup_params_1.y[j], &ipk_c)
+                            ]));
                         } else {
-                            let e_1 = GT::ate_2_pairing(
-                                &resp.odd_level_resp_t[i / 2][j],
-                                &comm.odd_level_blinded_r[i / 2],
-                                &(setup_params_1.y[j].negation()),
-                                &resp.even_level_resp_vk[(i / 2) - 1],
-                            );
-                            let e_2 = GT::ate_pairing(
-                                &comm.odd_level_revealed_attributes[i / 2][&j],
-                                &setup_params_1.g2,
-                            );
-                            let e_3 = GT::pow(&e_2, &challenge_neg);
-                            com_t.push(GT::mul(&e_1, &e_3));
+                            com_t.push(GT::ate_multi_pairing(vec![
+                                (&resp.odd_level_resp_t[i / 2][j], &comm.odd_level_blinded_r[i / 2]),
+                                (&(setup_params_1.y[j].negation()), &resp.even_level_resp_vk[(i / 2) - 1]),
+                                (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c)
+                            ]));
                         }
                     }
                 }
@@ -576,15 +567,11 @@ impl<'a> AttributeToken<'a> {
                 // For verkey
                 let com_i_vk = if i == 1 {
                     if i != L {
-                        let e_1 = GT::ate_2_pairing(
-                            &resp.odd_level_resp_t[i / 2][attr_count - 1],
-                            &comm.odd_level_blinded_r[i / 2],
-                            &resp.odd_level_resp_vk[i / 2],
-                            &groth1_neg_g2,
-                        );
-                        let e_2 = GT::ate_pairing(&setup_params_1.y[attr_count - 1], &ipk.0);
-                        let e_3 = GT::pow(&e_2, &challenge_neg);
-                        GT::mul(&e_1, &e_3)
+                        GT::ate_multi_pairing(vec![
+                            (&resp.odd_level_resp_t[i / 2][attr_count - 1], &comm.odd_level_blinded_r[i / 2]),
+                            (&resp.odd_level_resp_vk[i / 2], &groth1_neg_g2),
+                            (&setup_params_1.y[attr_count - 1], &ipk_c)
+                        ])
                     } else {
                         let e_1 = GT::ate_pairing(
                             &resp.odd_level_resp_t[i / 2][attr_count - 1],
@@ -593,9 +580,8 @@ impl<'a> AttributeToken<'a> {
                         let e_2 = GT::ate_pairing(&setup_params_1.g1, &groth1_neg_g2);
                         let e_3 = GT::pow(&e_2, &resp.resp_csk);
                         let e_4 = GT::mul(&e_1, &e_3);
-                        let e_5 = GT::ate_pairing(&setup_params_1.y[attr_count - 1], &ipk.0);
-                        let e_6 = GT::pow(&e_5, &challenge_neg);
-                        GT::mul(&e_4, &e_6)
+                        let e_5 = GT::ate_pairing(&setup_params_1.y[attr_count - 1], &ipk_c);
+                        GT::mul(&e_4, &e_5)
                     }
                 } else {
                     if i != L {
@@ -659,19 +645,11 @@ impl<'a> AttributeToken<'a> {
                     } else {
                         com_t.push({
                             // XXX: -y[j] can be pre-computed
-                            // XXX: If {g1^-c} is computed once for all even levels, a single multi-pairing can replace 2 pairings below.
-                            let e_1 = GT::ate_2_pairing(
-                                &resp.odd_level_resp_vk[(i / 2) - 1],
-                                &(setup_params_2.y[j].negation()),
-                                &comm.even_level_blinded_r[(i / 2) - 1],
-                                &resp.even_level_resp_t[(i / 2) - 1][j],
-                            );
-                            let e_2 = GT::ate_pairing(
-                                &setup_params_2.g1,
-                                &comm.even_level_revealed_attributes[(i / 2) - 1][&j],
-                            );
-                            let e_3 = GT::pow(&e_2, &challenge_neg);
-                            GT::mul(&e_1, &e_3)
+                            GT::ate_multi_pairing(vec![
+                                (&resp.odd_level_resp_vk[(i / 2) - 1], &(setup_params_2.y[j].negation())),
+                                (&comm.even_level_blinded_r[(i / 2) - 1], &resp.even_level_resp_t[(i / 2) - 1][j]),
+                                (&groth2_g1_c, &comm.even_level_revealed_attributes[(i / 2) - 1][&j])
+                            ])
                         });
                     }
                 }
@@ -837,7 +815,7 @@ mod tests {
 
         let recon_c_1 = AttributeToken::gen_challenge(&recon_com_1, &l_0_issuer_vk);
         assert_eq!(c_1, recon_c_1);
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
 
         let attributes_2: G2Vector = (0..max_attributes - 1)
@@ -894,7 +872,7 @@ mod tests {
 
         let recon_c_2 = AttributeToken::gen_challenge(&recon_com_2, &l_0_issuer_vk);
         assert_eq!(c_2, recon_c_2);
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
 
         let attributes_3: G1Vector = (0..max_attributes - 1)
@@ -953,7 +931,7 @@ mod tests {
         let recon_c_3 = AttributeToken::gen_challenge(&recon_com_3, &l_0_issuer_vk);
         assert_eq!(c_3, recon_c_3);
 
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
 
         let attributes_4: G2Vector = (0..max_attributes - 1)
@@ -1013,7 +991,7 @@ mod tests {
 
         let recon_c_4 = AttributeToken::gen_challenge(&recon_com_4, &l_0_issuer_vk);
         assert_eq!(c_4, recon_c_4);
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
 
         let attributes_5: G1Vector = (0..max_attributes - 1)
@@ -1074,7 +1052,7 @@ mod tests {
 
         let recon_c_5 = AttributeToken::gen_challenge(&recon_com_5, &l_0_issuer_vk);
         assert_eq!(c_5, recon_c_5);
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
 
         let attributes_6: G2Vector = (0..max_attributes - 1)
@@ -1136,7 +1114,7 @@ mod tests {
 
         let recon_c_6 = AttributeToken::gen_challenge(&recon_com_6, &l_0_issuer_vk);
         assert_eq!(c_6, recon_c_6);
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
     }
 
@@ -1214,7 +1192,7 @@ mod tests {
 
         let recon_c_1 = AttributeToken::gen_challenge(&recon_com_1, &l_0_issuer_vk);
         assert_eq!(c_1, recon_c_1);
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
 
         let attributes_2: G2Vector = (0..max_attributes - 1)
@@ -1292,7 +1270,7 @@ mod tests {
 
         let recon_c_2 = AttributeToken::gen_challenge(&recon_com_2, &l_0_issuer_vk);
         assert_eq!(c_2, recon_c_2);
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
 
         let attributes_3: G1Vector = (0..max_attributes - 1)
@@ -1374,7 +1352,7 @@ mod tests {
         let recon_c_3 = AttributeToken::gen_challenge(&recon_com_3, &l_0_issuer_vk);
         assert_eq!(c_3, recon_c_3);
 
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
 
         let attributes_4: G2Vector = (0..max_attributes - 1)
@@ -1464,7 +1442,7 @@ mod tests {
 
         let recon_c_4 = AttributeToken::gen_challenge(&recon_com_4, &l_0_issuer_vk);
         assert_eq!(c_4, recon_c_4);
-        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, challenge reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
+        println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
     }
 }
