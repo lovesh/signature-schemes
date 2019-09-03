@@ -52,6 +52,8 @@ pub struct AttributeTokenResp {
     pub even_level_resp_a: Vec<G2Vector>,
 }
 
+// TODO: Convert asserts in non-test code to errors
+
 impl<'a> AttributeToken<'a> {
     pub fn new(
         cred_chain: &'a CredChain,
@@ -127,13 +129,13 @@ impl<'a> AttributeToken<'a> {
                     GT::mul(&e_1, &e_2)
                 };
 
-                let unrevealed_attr_count = link.message_count() - revealed[i - 1].len();
-                let mut r_t = FieldElementVector::with_capacity(link.message_count());
+                let unrevealed_attr_count = link.attribute_count() - revealed[i - 1].len();
+                let mut r_t = FieldElementVector::with_capacity(link.attribute_count());
                 let mut r_a = FieldElementVector::with_capacity(unrevealed_attr_count);
-                let mut com_t = Vec::<GT>::with_capacity(link.message_count());
+                let mut com_t = Vec::<GT>::with_capacity(link.attribute_count());
 
                 // Last attribute is the verkey so skip for now
-                for j in 0..(link.message_count() - 1) {
+                for j in 0..(link.attribute_count() - 1) {
                     // blinding for t_{i, j}
                     let rr_t = FieldElement::random();
 
@@ -158,7 +160,7 @@ impl<'a> AttributeToken<'a> {
                         com_i_t = GT::mul(&com_i_t, &e);
                         r_a.push(rr_a);
                     } else {
-                        rev_attrs.insert(j, link.messages[j].clone());
+                        rev_attrs.insert(j, link.attributes[j].clone());
                     }
                     com_t.push(com_i_t);
                     r_t.push(rr_t);
@@ -178,7 +180,7 @@ impl<'a> AttributeToken<'a> {
                     // Different from paper here, paper uses e(y1_j, g2) but e(-y1_j, g2) should be used and e(-y1_j, g2) equals e(y1_j, -g2)
                     // e(y1_j, -g2)^{blindings_vk[i-2]}
                     let e_1 = GT::ate_pairing(
-                        &self.setup_params_1.y[link.message_count() - 1],
+                        &self.setup_params_1.y[link.attribute_count() - 1],
                         &groth1_neg_g2,
                     );
                     let e_2 = GT::pow(&e_1, &self.blindings_vk[i - 2]);
@@ -205,13 +207,13 @@ impl<'a> AttributeToken<'a> {
                 let e_2 = GT::pow(&pairing_inv_groth2_g1_g2, &self.blindings_vk[i - 2]);
                 let com_i_s = GT::mul(&e_1, &e_2);
 
-                let unrevealed_attr_count = link.message_count() - revealed[i - 1].len();
-                let mut r_t = FieldElementVector::with_capacity(link.message_count());
+                let unrevealed_attr_count = link.attribute_count() - revealed[i - 1].len();
+                let mut r_t = FieldElementVector::with_capacity(link.attribute_count());
                 let mut r_a = FieldElementVector::with_capacity(unrevealed_attr_count);
-                let mut com_t = Vec::<GT>::with_capacity(link.message_count());
+                let mut com_t = Vec::<GT>::with_capacity(link.attribute_count());
 
                 // Last attribute is the verkey so skip for now
-                for j in 0..(link.message_count() - 1) {
+                for j in 0..(link.attribute_count() - 1) {
                     // blinding for t_{i, j}
                     let rr_t = FieldElement::random();
 
@@ -231,7 +233,7 @@ impl<'a> AttributeToken<'a> {
                         com_i_t = GT::mul(&com_i_t, &e);
                         r_a.push(rr_a);
                     } else {
-                        rev_attrs.insert(j, link.messages[j].clone());
+                        rev_attrs.insert(j, link.attributes[j].clone());
                     }
                     com_t.push(com_i_t);
                     r_t.push(rr_t);
@@ -247,7 +249,7 @@ impl<'a> AttributeToken<'a> {
                 let e_2 = GT::pow(&pairing_inv_groth1_g1_g2, &rho_vk);
                 let e_3 = GT::ate_pairing(
                     &groth2_neg_g1,
-                    &self.setup_params_2.y[link.message_count() - 1],
+                    &self.setup_params_2.y[link.attribute_count() - 1],
                 );
                 let e_4 = GT::pow(&e_3, &self.blindings_vk[i - 2]);
                 let com_i_vk = GT::mul(&GT::mul(&e_1, &e_2), &e_4);
@@ -336,14 +338,14 @@ impl<'a> AttributeToken<'a> {
 
                 // Total messages - revealed attributes - last message (for verkey)
                 let unrevealed_attr_count =
-                    link.message_count() - at.odd_level_revealed_attributes[i / 2].len() - 1;
+                    link.attribute_count() - at.odd_level_revealed_attributes[i / 2].len() - 1;
                 assert_eq!(self.blindings_t[i - 1].len(), link.signature.T.len());
-                assert_eq!(link.message_count(), link.signature.T.len());
+                assert_eq!(link.attribute_count(), link.signature.T.len());
                 assert_eq!(self.blindings_a[i - 1].len(), unrevealed_attr_count);
-                let mut resp_t = G1Vector::with_capacity(link.message_count());
+                let mut resp_t = G1Vector::with_capacity(link.attribute_count());
                 let mut resp_a = G1Vector::with_capacity(unrevealed_attr_count);
                 let mut k = 0;
-                for j in 0..link.message_count() {
+                for j in 0..link.attribute_count() {
                     // Different from paper here, paper uses `t` from the signature but `t` from blind signature should be used.
                     resp_t.push(self.setup_params_1.g1.binary_scalar_mul(
                         &self.odd_level_blinded_sigs[i / 2].T[j],
@@ -351,11 +353,11 @@ impl<'a> AttributeToken<'a> {
                         challenge,
                     ));
                     // If attribute is not revealed. Last attribute is verkey so ignore.
-                    if j != (link.message_count() - 1)
+                    if j != (link.attribute_count() - 1)
                         && !at.odd_level_revealed_attributes[i / 2].contains_key(&j)
                     {
                         resp_a.push(self.setup_params_1.g1.binary_scalar_mul(
-                            &link.messages[j],
+                            &link.attributes[j],
                             &self.blindings_a[i - 1][k],
                             challenge,
                         ));
@@ -389,15 +391,16 @@ impl<'a> AttributeToken<'a> {
                 }
 
                 // Total messages - revealed attributes - last message (for verkey)
-                let unrevealed_attr_count =
-                    link.message_count() - at.even_level_revealed_attributes[(i / 2) - 1].len() - 1;
+                let unrevealed_attr_count = link.attribute_count()
+                    - at.even_level_revealed_attributes[(i / 2) - 1].len()
+                    - 1;
                 assert_eq!(self.blindings_t[i - 1].len(), link.signature.T.len());
-                assert_eq!(link.message_count(), link.signature.T.len());
+                assert_eq!(link.attribute_count(), link.signature.T.len());
                 assert_eq!(self.blindings_a[i - 1].len(), unrevealed_attr_count);
-                let mut resp_t = G2Vector::with_capacity(link.message_count());
+                let mut resp_t = G2Vector::with_capacity(link.attribute_count());
                 let mut resp_a = G2Vector::with_capacity(unrevealed_attr_count);
                 let mut k = 0;
-                for j in 0..link.message_count() {
+                for j in 0..link.attribute_count() {
                     resp_t.push(binary_scalar_mul_g2(
                         &self.setup_params_2.g2,
                         //&link.signature.T[j],
@@ -406,12 +409,12 @@ impl<'a> AttributeToken<'a> {
                         challenge,
                     ));
                     // If attribute is not revealed. Last attribute is verkey so ignore.
-                    if j != (link.message_count() - 1)
+                    if j != (link.attribute_count() - 1)
                         && !at.even_level_revealed_attributes[(i / 2) - 1].contains_key(&j)
                     {
                         resp_a.push(binary_scalar_mul_g2(
                             &self.setup_params_2.g2,
-                            &link.messages[j],
+                            &link.attributes[j],
                             &self.blindings_a[i - 1][k],
                             challenge,
                         ));
@@ -457,6 +460,11 @@ impl<'a> AttributeToken<'a> {
         setup_params_1: &Groth1SetupParams,
         setup_params_2: &Groth2SetupParams,
     ) -> DelgResult<AttributeTokenComm> {
+        assert_eq!(comm.comms_s.len(), L);
+        assert_eq!(comm.comms_t.len(), L);
+        assert!(setup_params_1.y.len() >= L);
+        assert!(setup_params_2.y.len() >= L);
+
         let mut comms_s = Vec::<GT>::with_capacity(L);
         let mut comms_t = Vec::<Vec<GT>>::with_capacity(L);
 
@@ -529,9 +537,12 @@ impl<'a> AttributeToken<'a> {
                     if !revealed[i - 1].contains(&j) {
                         if i == 1 {
                             com_t.push(GT::ate_multi_pairing(vec![
-                                (&resp.odd_level_resp_t[i / 2][j], &comm.odd_level_blinded_r[i / 2]),
+                                (
+                                    &resp.odd_level_resp_t[i / 2][j],
+                                    &comm.odd_level_blinded_r[i / 2],
+                                ),
                                 (&resp.odd_level_resp_a[i / 2][k], &groth1_neg_g2),
-                                (&setup_params_1.y[j], &ipk_c)
+                                (&setup_params_1.y[j], &ipk_c),
                             ]));
                         } else {
                             com_t.push(GT::ate_multi_pairing(vec![
@@ -550,15 +561,24 @@ impl<'a> AttributeToken<'a> {
                     } else {
                         if i == 1 {
                             com_t.push(GT::ate_multi_pairing(vec![
-                                (&resp.odd_level_resp_t[i / 2][j], &comm.odd_level_blinded_r[i / 2]),
+                                (
+                                    &resp.odd_level_resp_t[i / 2][j],
+                                    &comm.odd_level_blinded_r[i / 2],
+                                ),
                                 (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c),
-                                (&setup_params_1.y[j], &ipk_c)
+                                (&setup_params_1.y[j], &ipk_c),
                             ]));
                         } else {
                             com_t.push(GT::ate_multi_pairing(vec![
-                                (&resp.odd_level_resp_t[i / 2][j], &comm.odd_level_blinded_r[i / 2]),
-                                (&(setup_params_1.y[j].negation()), &resp.even_level_resp_vk[(i / 2) - 1]),
-                                (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c)
+                                (
+                                    &resp.odd_level_resp_t[i / 2][j],
+                                    &comm.odd_level_blinded_r[i / 2],
+                                ),
+                                (
+                                    &(setup_params_1.y[j].negation()),
+                                    &resp.even_level_resp_vk[(i / 2) - 1],
+                                ),
+                                (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c),
                             ]));
                         }
                     }
@@ -568,9 +588,12 @@ impl<'a> AttributeToken<'a> {
                 let com_i_vk = if i == 1 {
                     if i != L {
                         GT::ate_multi_pairing(vec![
-                            (&resp.odd_level_resp_t[i / 2][attr_count - 1], &comm.odd_level_blinded_r[i / 2]),
+                            (
+                                &resp.odd_level_resp_t[i / 2][attr_count - 1],
+                                &comm.odd_level_blinded_r[i / 2],
+                            ),
                             (&resp.odd_level_resp_vk[i / 2], &groth1_neg_g2),
-                            (&setup_params_1.y[attr_count - 1], &ipk_c)
+                            (&setup_params_1.y[attr_count - 1], &ipk_c),
                         ])
                     } else {
                         let e_1 = GT::ate_pairing(
@@ -646,9 +669,18 @@ impl<'a> AttributeToken<'a> {
                         com_t.push({
                             // XXX: -y[j] can be pre-computed
                             GT::ate_multi_pairing(vec![
-                                (&resp.odd_level_resp_vk[(i / 2) - 1], &(setup_params_2.y[j].negation())),
-                                (&comm.even_level_blinded_r[(i / 2) - 1], &resp.even_level_resp_t[(i / 2) - 1][j]),
-                                (&groth2_g1_c, &comm.even_level_revealed_attributes[(i / 2) - 1][&j])
+                                (
+                                    &resp.odd_level_resp_vk[(i / 2) - 1],
+                                    &(setup_params_2.y[j].negation()),
+                                ),
+                                (
+                                    &comm.even_level_blinded_r[(i / 2) - 1],
+                                    &resp.even_level_resp_t[(i / 2) - 1][j],
+                                ),
+                                (
+                                    &groth2_g1_c,
+                                    &comm.even_level_revealed_attributes[(i / 2) - 1][&j],
+                                ),
                             ])
                         });
                     }
@@ -748,6 +780,11 @@ mod tests {
     fn test_attribute_token() {
         let max_attributes = 6;
         let label = "test".as_bytes();
+
+        println!(
+            "Each credential will have {} attributes",
+            max_attributes - 1
+        );
 
         let params1 = GrothS1::setup(max_attributes, label);
         let params2 = GrothS2::setup(max_attributes, label);
@@ -1122,6 +1159,11 @@ mod tests {
     fn test_attribute_token_with_revealed_attributes() {
         let max_attributes = 6;
         let label = "test".as_bytes();
+
+        println!(
+            "Each credential will have {} attributes",
+            max_attributes - 1
+        );
 
         let params1 = GrothS1::setup(max_attributes, label);
         let params2 = GrothS2::setup(max_attributes, label);

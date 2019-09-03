@@ -77,6 +77,7 @@ pub struct GrothS1 {}
 
 impl GrothS1 {
     pub fn setup(count_messages: usize, label: &[u8]) -> Groth1SetupParams {
+        // NUMS for g1 and g2
         let g1 = G1::from_msg_hash(&[label, " : g1".as_bytes()].concat());
         let g2 = G2::from_msg_hash(&[label, " : g2".as_bytes()].concat());
         let mut y = G1Vector::with_capacity(count_messages);
@@ -251,6 +252,7 @@ pub struct GrothS2 {}
 
 impl GrothS2 {
     pub fn setup(count_messages: usize, label: &[u8]) -> Groth2SetupParams {
+        // NUMS for g1 and g2
         let g1 = G1::from_msg_hash(&[label, " : g1".as_bytes()].concat());
         let g2 = G2::from_msg_hash(&[label, " : g2".as_bytes()].concat());
         let mut y = G2Vector::with_capacity(count_messages);

@@ -17,14 +17,14 @@ pub type OddLevelVerkey = Groth2Verkey;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CredLinkOdd {
     pub level: usize,
-    pub messages: G1Vector,
+    pub attributes: G1Vector,
     pub signature: Groth1Sig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CredLinkEven {
     pub level: usize,
-    pub messages: G2Vector,
+    pub attributes: G2Vector,
     pub signature: Groth2Sig,
 }
 
@@ -45,22 +45,64 @@ pub struct OddLevelIssuer {
 }
 
 impl CredLinkOdd {
-    pub fn message_count(&self) -> usize {
-        self.messages.len()
+    pub fn attribute_count(&self) -> usize {
+        self.attributes.len()
     }
 
     pub fn has_verkey(&self, vk: &OddLevelVerkey) -> bool {
-        self.messages[self.messages.len() - 1] == vk.0
+        self.attributes[self.attributes.len() - 1] == vk.0
+    }
+
+    pub fn verify(
+        &self,
+        delegatee_vk: &OddLevelVerkey,
+        delegator_vk: &EvenLevelVerkey,
+        setup_params: &Groth1SetupParams,
+    ) -> DelgResult<bool> {
+        if self.attributes.len() > setup_params.y.len() {
+            return Err(DelgError::MoreAttributesThanExpected {
+                expected: setup_params.y.len(),
+                given: self.attributes.len(),
+            });
+        }
+        if !self.has_verkey(delegatee_vk) {
+            return Err(DelgError::VerkeyNotFoundInDelegationLink {});
+        }
+        /*link.signature
+        .verify(link.messages.as_slice(), delegator_vk, setup_params)*/
+        self.signature
+            .verify_fast(self.attributes.as_slice(), delegator_vk, setup_params)
     }
 }
 
 impl CredLinkEven {
-    pub fn message_count(&self) -> usize {
-        self.messages.len()
+    pub fn attribute_count(&self) -> usize {
+        self.attributes.len()
     }
 
     pub fn has_verkey(&self, vk: &EvenLevelVerkey) -> bool {
-        self.messages[self.messages.len() - 1] == vk.0
+        self.attributes[self.attributes.len() - 1] == vk.0
+    }
+
+    pub fn verify(
+        &self,
+        delegatee_vk: &EvenLevelVerkey,
+        delegator_vk: &OddLevelVerkey,
+        setup_params: &Groth2SetupParams,
+    ) -> DelgResult<bool> {
+        if self.attributes.len() > setup_params.y.len() {
+            return Err(DelgError::MoreAttributesThanExpected {
+                expected: setup_params.y.len(),
+                given: self.attributes.len(),
+            });
+        }
+        if !self.has_verkey(delegatee_vk) {
+            return Err(DelgError::VerkeyNotFoundInDelegationLink {});
+        }
+        /*link.signature
+        .verify(link.messages.as_slice(), delegator_vk, setup_params)*/
+        self.signature
+            .verify_fast(self.attributes.as_slice(), delegator_vk, setup_params)
     }
 }
 
@@ -107,6 +149,7 @@ impl CredChain {
 
     pub fn extend_with_odd(&mut self, link: CredLinkOdd) -> DelgResult<()> {
         // TODO: Add more validations so that there are no duplicate levels or gaps
+        // TODO: Maybe verify the link too.
         if link.level % 2 == 0 {
             return Err(DelgError::ExpectedOddLevel { given: link.level });
         }
@@ -116,6 +159,7 @@ impl CredChain {
 
     pub fn extend_with_even(&mut self, link: CredLinkEven) -> DelgResult<()> {
         // TODO: Add more validations so that there are no duplicate levels or gaps
+        // TODO: Maybe verify the link too.
         if link.level % 2 != 0 {
             return Err(DelgError::ExpectedEvenLevel { given: link.level });
         }
@@ -133,19 +177,7 @@ impl CredChain {
             return Err(DelgError::NoOddLinksInChain {});
         }
         let link = &self.odd_links[self.odd_size() - 1];
-        if link.messages.len() > setup_params.y.len() {
-            return Err(DelgError::MoreAttributesThanExpected {
-                expected: setup_params.y.len(),
-                given: link.messages.len(),
-            });
-        }
-        if !link.has_verkey(delegatee_vk) {
-            return Err(DelgError::VerkeyNotFoundInDelegationLink {});
-        }
-        /*link.signature
-        .verify(link.messages.as_slice(), delegator_vk, setup_params)*/
-        link.signature
-            .verify_fast(link.messages.as_slice(), delegator_vk, setup_params)
+        link.verify(delegatee_vk, delegator_vk, setup_params)
     }
 
     pub fn verify_last_even_delegation(
@@ -158,19 +190,7 @@ impl CredChain {
             return Err(DelgError::NoEvenLinksInChain {});
         }
         let link = &self.even_links[self.even_size() - 1];
-        if link.messages.len() > setup_params.y.len() {
-            return Err(DelgError::MoreAttributesThanExpected {
-                expected: setup_params.y.len(),
-                given: link.messages.len(),
-            });
-        }
-        if !link.has_verkey(delegatee_vk) {
-            return Err(DelgError::VerkeyNotFoundInDelegationLink {});
-        }
-        /*link.signature
-        .verify(link.messages.as_slice(), delegator_vk, setup_params)*/
-        link.signature
-            .verify_fast(link.messages.as_slice(), delegator_vk, setup_params)
+        link.verify(delegatee_vk, delegator_vk, setup_params)
     }
 
     // First verkey of even_level_vks is the root issuer's key
@@ -189,43 +209,11 @@ impl CredChain {
             let r = if i % 2 == 1 {
                 let idx = i / 2;
                 let link = &self.odd_links[idx];
-                if link.messages.len() > setup_params_1.y.len() {
-                    return Err(DelgError::MoreAttributesThanExpected {
-                        expected: setup_params_1.y.len(),
-                        given: link.messages.len(),
-                    });
-                }
-                if !link.has_verkey(odd_level_vks[idx]) {
-                    return Err(DelgError::VerkeyNotFoundInDelegationLink {});
-                }
-                /*link.signature.verify(
-                    link.messages.as_slice(),
-                    even_level_vks[idx],
-                    setup_params_1,
-                )?*/
-                link.signature.verify_fast(
-                    link.messages.as_slice(),
-                    even_level_vks[idx],
-                    setup_params_1,
-                )?
+                link.verify(odd_level_vks[idx], even_level_vks[idx], setup_params_1)?
             } else {
                 let link = &self.even_links[(i / 2) - 1];
-                if link.messages.len() > setup_params_2.y.len() {
-                    return Err(DelgError::MoreAttributesThanExpected {
-                        expected: setup_params_2.y.len(),
-                        given: link.messages.len(),
-                    });
-                }
-                if !link.has_verkey(even_level_vks[i / 2]) {
-                    return Err(DelgError::VerkeyNotFoundInDelegationLink {});
-                }
-                /*link.signature.verify(
-                    link.messages.as_slice(),
-                    odd_level_vks[(i / 2) - 1],
-                    setup_params_2,
-                )?*/
-                link.signature.verify_fast(
-                    link.messages.as_slice(),
+                link.verify(
+                    even_level_vks[i / 2],
                     odd_level_vks[(i / 2) - 1],
                     setup_params_2,
                 )?
@@ -267,7 +255,7 @@ impl EvenLevelIssuer {
         let signature = Groth1Sig::new(delegatee_attributes.as_slice(), sk, setup_params)?;
         Ok(CredLinkOdd {
             level: &self.level + 1,
-            messages: delegatee_attributes,
+            attributes: delegatee_attributes,
             signature,
         })
     }
@@ -302,7 +290,7 @@ impl OddLevelIssuer {
         let signature = Groth2Sig::new(delegatee_attributes.as_slice(), sk, setup_params)?;
         Ok(CredLinkEven {
             level: &self.level + 1,
-            messages: delegatee_attributes,
+            attributes: delegatee_attributes,
             signature,
         })
     }
@@ -342,12 +330,15 @@ mod tests {
             )
             .unwrap();
 
+        assert!(cred_link_1
+            .verify(&l_1_issuer_vk, &l_0_issuer_vk, &params1)
+            .unwrap());
+
         let mut chain_1 = CredChain::new();
         chain_1.extend_with_odd(cred_link_1).unwrap();
         assert_eq!(chain_1.odd_size(), 1);
         assert_eq!(chain_1.even_size(), 0);
         assert_eq!(chain_1.size(), 1);
-
         assert!(chain_1
             .verify_last_odd_delegation(&l_1_issuer_vk, &l_0_issuer_vk, &params1)
             .unwrap());
@@ -364,6 +355,10 @@ mod tests {
                 &params2,
             )
             .unwrap();
+
+        assert!(cred_link_2
+            .verify(&l_2_issuer_vk, &l_1_issuer_vk, &params2)
+            .unwrap());
 
         let mut chain_2 = chain_1.clone();
         chain_2.extend_with_even(cred_link_2).unwrap();
@@ -406,6 +401,9 @@ mod tests {
                 &params1,
             )
             .unwrap();
+        assert!(cred_link_1
+            .verify(&l_1_issuer_vk, &l_0_issuer_vk, &params1)
+            .unwrap());
         let mut chain_1 = CredChain::new();
         chain_1.extend_with_odd(cred_link_1).unwrap();
 
@@ -436,6 +434,9 @@ mod tests {
                 &params2,
             )
             .unwrap();
+        assert!(cred_link_2
+            .verify(&l_2_issuer_vk, &l_1_issuer_vk, &params2)
+            .unwrap());
         let mut chain_2 = chain_1.clone();
         chain_2.extend_with_even(cred_link_2).unwrap();
 
@@ -466,6 +467,9 @@ mod tests {
                 &params1,
             )
             .unwrap();
+        assert!(cred_link_3
+            .verify(&l_3_issuer_vk, &l_2_issuer_vk, &params1)
+            .unwrap());
         let mut chain_3 = chain_2.clone();
         chain_3.extend_with_odd(cred_link_3).unwrap();
 
@@ -496,6 +500,9 @@ mod tests {
                 &params2,
             )
             .unwrap();
+        assert!(cred_link_4
+            .verify(&l_4_issuer_vk, &l_3_issuer_vk, &params2)
+            .unwrap());
         let mut chain_4 = chain_3.clone();
         chain_4.extend_with_even(cred_link_4).unwrap();
 
