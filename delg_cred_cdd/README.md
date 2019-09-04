@@ -1,5 +1,4 @@
-[Practical UC-Secure Delegatable Credentials with Attributes and Their Application to Blockchain](https://acmccs.github.io/papers/p683-camenischA.pdf
-)
+[Practical UC-Secure Delegatable Credentials with Attributes and Their Application to Blockchain](https://acmccs.github.io/papers/p683-camenischA.pdf)
 
 **This implementation is not UC-secure but only implements the delegatable credential part**
 

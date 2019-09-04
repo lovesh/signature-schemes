@@ -6,4 +6,5 @@ Uses the [The Apache Milagro Cryptographic Library](https://github.com/milagro-c
    Used BLS12-381 curve from Apache Milagro. [Signing and verification API](./bls/README.md)
 2. MuSig, Schnorr Multi-Signatures. [Simple Schnorr Multi-Signatures with Applications to Bitcoin](https://eprint.iacr.org/2018/068.pdf) 
 by Gregory Maxwell and Andrew Poelstra and Yannick Seurin and Pieter Wuille. Used secp256k1 curve. [Signing and verification API](./musig/README.md)
-3. [PS (Pointcheval Sanders) signatures](https://eprint.iacr.org/2015/525.pdf). 
+3. [PS (Pointcheval Sanders) signatures](https://eprint.iacr.org/2015/525.pdf).
+4. [Practical UC-Secure Delegatable Credentials with Attributes and Their Application to Blockchain](https://acmccs.github.io/papers/p683-camenischA.pdf) 
