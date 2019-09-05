@@ -14,6 +14,8 @@ use std::ops::Add;
 pub type OddLevelAttribute = G1;
 pub type EvenLevelAttribute = G2;
 
+// Assumes that chain has already been verified using `CredChain::verify_delegations`
+#[derive(Clone, Debug)]
 pub struct AttributeToken<'a> {
     L: usize,
     cred_chain: &'a CredChain,
@@ -28,7 +30,7 @@ pub struct AttributeToken<'a> {
     blindings_a: Vec<FieldElementVector>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AttributeTokenComm {
     pub odd_level_blinded_r: G2Vector,
     pub even_level_blinded_r: G1Vector,
@@ -38,7 +40,7 @@ pub struct AttributeTokenComm {
     pub even_level_revealed_attributes: Vec<HashMap<usize, EvenLevelAttribute>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AttributeTokenResp {
     pub resp_csk: FieldElement,
     pub odd_level_resp_vk: G1Vector,
@@ -47,11 +49,120 @@ pub struct AttributeTokenResp {
     pub even_level_resp_s: G2Vector,
     pub odd_level_resp_t: Vec<G1Vector>,
     pub even_level_resp_t: Vec<G2Vector>,
-    // TODO: Make both resp_a as HashMap<usize, G1>
     pub odd_level_resp_a: Vec<G1Vector>,
     pub even_level_resp_a: Vec<G2Vector>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PrecompOnSetupParams {
+    // In practice, e(g1, g2)^-1 in both Groth1 and Groth2 can be same
+    // e(g1, g2)^-1 when g1 and g2 are part of Groth1 params
+    pub pairing_inv_groth1_g1_g2: GT,
+    // e(g1, g2)^-1 when g1 and g2 are part of Groth2 params
+    pub pairing_inv_groth2_g1_g2: GT,
+    // e(-y_i, g1) when g2 and y_i are part of Groth1 params
+    pub groth1_neg_y_g2: Vec<GT>,
+    // e(-g1, y_i) when g1 and y_i are part of Groth2 params
+    pub groth2_neg_g1_y: Vec<GT>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PrecompOnCredChain {
+    pub pairing_g_r: Vec<GT>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PrecompForCommitmentReconstitution {
+    // In practice, e(g1, g2)^-1 in both Groth1 and Groth2 can be same
+    // e(g1, g2)^-1 when g1 and g2 are part of Groth1 params
+    pub pairing_inv_groth1_g1_g2: GT,
+    // e(g1, g2)^-1 when g1 and g2 are part of Groth2 params
+    pub pairing_inv_groth2_g1_g2: GT,
+    pub groth1_y0_g2: GT,
+    pub groth2_g1_y0: GT,
+    pub groth1_g1_ipk: GT,
+    pub groth1_y_ipk: Vec<GT>,
+}
+
+impl PrecompOnSetupParams {
+    pub fn new(setup_params_1: &Groth1SetupParams, setup_params_2: &Groth2SetupParams) -> Self {
+        // e(-g1, g2) and e(g1, -g2) are equal and same as e(g1, g2)^-1.
+        // Not computing e(g1, g2)^-1 as computing inverse is more expensive than negating a group element
+        // Negating element of G1 is cheaper than G2
+        let pairing_inv_groth1_g1_g2 =
+            GT::ate_pairing(&setup_params_1.g1.negation(), &setup_params_1.g2);
+        let pairing_inv_groth2_g1_g2 =
+            GT::ate_pairing(&setup_params_2.g1.negation(), &setup_params_2.g2);
+        let mut groth1_y_g2 = Vec::<GT>::with_capacity(setup_params_1.y.len());
+        let mut groth2_g1_y = Vec::<GT>::with_capacity(setup_params_2.y.len());
+        let neg_g2 = -&setup_params_1.g2;
+        let neg_g1 = -&setup_params_2.g1;
+        for y in setup_params_1.y.iter() {
+            groth1_y_g2.push(GT::ate_pairing(y, &neg_g2));
+        }
+        for y in setup_params_2.y.iter() {
+            groth2_g1_y.push(GT::ate_pairing(&neg_g1, y));
+        }
+        Self {
+            pairing_inv_groth1_g1_g2,
+            pairing_inv_groth2_g1_g2,
+            groth1_neg_y_g2: groth1_y_g2,
+            groth2_neg_g1_y: groth2_g1_y,
+        }
+    }
+}
+
+impl PrecompOnCredChain {
+    pub fn new(
+        cred_chain: &CredChain,
+        setup_params_1: &Groth1SetupParams,
+        setup_params_2: &Groth2SetupParams,
+    ) -> DelgResult<Self> {
+        let mut pairing_g_r = vec![];
+        for i in 1..=cred_chain.size() {
+            if i % 2 == 1 {
+                // Odd levels
+                let link = cred_chain.get_odd_link(i / 2)?;
+                // e(g1, r_i)
+                pairing_g_r.push(GT::ate_pairing(&setup_params_1.g1, &link.signature.R));
+            } else {
+                // Even levels
+                let link = cred_chain.get_even_link((i / 2) - 1)?;
+                // e(r_i, g2)
+                pairing_g_r.push(GT::ate_pairing(&link.signature.R, &setup_params_2.g2));
+            }
+        }
+        Ok(Self { pairing_g_r })
+    }
+}
+
+impl PrecompForCommitmentReconstitution {
+    pub fn new(
+        ipk: &EvenLevelVerkey,
+        setup_params_1: &Groth1SetupParams,
+        setup_params_2: &Groth2SetupParams,
+    ) -> Self {
+        let pairing_inv_groth1_g1_g2 =
+            GT::ate_pairing(&setup_params_1.g1.negation(), &setup_params_1.g2);
+        let pairing_inv_groth2_g1_g2 =
+            GT::ate_pairing(&setup_params_2.g1.negation(), &setup_params_2.g2);
+        let groth1_y0_g2 = GT::ate_pairing(&setup_params_1.y[0], &setup_params_1.g2);
+        let groth2_g1_y0 = GT::ate_pairing(&setup_params_2.g1, &setup_params_2.y[0]);
+        let groth1_g1_ipk = GT::ate_pairing(&setup_params_1.g1, &ipk.0);
+        let mut groth1_y_ipk = vec![];
+        for y in setup_params_1.y.iter() {
+            groth1_y_ipk.push(GT::ate_pairing(y, &ipk.0));
+        }
+        Self {
+            pairing_inv_groth1_g1_g2,
+            pairing_inv_groth2_g1_g2,
+            groth1_y0_g2,
+            groth2_g1_y0,
+            groth1_g1_ipk,
+            groth1_y_ipk,
+        }
+    }
+}
 // TODO: Convert asserts in non-test code to errors
 
 impl<'a> AttributeToken<'a> {
@@ -76,219 +187,17 @@ impl<'a> AttributeToken<'a> {
         }
     }
 
-    // TODO: Provide a method that takes precomputed e(g, r_i), e(g1, -g2), e(-g1, g2), e(y_{1, j}, g2), e(g1, y_{2, j})
     // Assuming that chain has already been verified using `CredChain::verify_delegations`
     pub fn commitment(&mut self, revealed: Vec<HashSet<usize>>) -> DelgResult<AttributeTokenComm> {
-        assert_eq!(revealed.len(), self.L);
-
-        // In practice, g1 and g2 in both Groth1 and Groth2 can be same
-        // XXX: Precompute
-        let groth1_neg_g1 = self.setup_params_1.g1.negation();
-        let groth1_neg_g2 = self.setup_params_1.g2.negation();
-        let groth2_neg_g1 = self.setup_params_2.g1.negation();
-        let groth2_neg_g2 = self.setup_params_2.g2.negation();
-
-        // e(-g1, g2), e(g1, -g2) are needed at several places for Groth1 and Groth2. But e(-g1, g2) and e(g1, -g2) are equal and same as e(g1, g2)^-1.
-        // Not computing e(g1, g2)^-1 as computing inverse is more expensive than negating any group element
-        // In practice, e(g1, g2)^-1 in both Groth1 and Groth2 can be same
-        // For Groth1 params e(-g1, g2) == e(g1, -g2) == e(g1, g2)^-1
-        let pairing_inv_groth1_g1_g2 = GT::ate_pairing(&groth1_neg_g1, &self.setup_params_1.g2);
-        // For Groth2 params e(-g1, g2) == e(g1, -g2) == e(g1, g2)^-1
-        let pairing_inv_groth2_g1_g2 = GT::ate_pairing(&groth2_neg_g1, &self.setup_params_2.g2);
-
-        let mut odd_level_revealed_attributes =
-            Vec::<HashMap<usize, OddLevelAttribute>>::with_capacity(self.L);
-        let mut even_level_revealed_attributes =
-            Vec::<HashMap<usize, EvenLevelAttribute>>::with_capacity(self.L);
-        let mut comms_s = Vec::<GT>::with_capacity(self.L);
-        let mut comms_t = Vec::<Vec<GT>>::with_capacity(self.L);
-
-        for i in 1..=self.L {
-            let rho_sig = FieldElement::random();
-            let rho_s = FieldElement::random();
-            let rho_vk = FieldElement::random();
-
-            let (rho_t, rho_a, com_s, com_t) = if i % 2 == 1 {
-                // Odd levels
-                let link = self.cred_chain.get_odd_link(i / 2)?;
-                self.odd_level_blinded_sigs
-                    .push(link.signature.randomize(&rho_sig));
-
-                let mut rev_attrs = HashMap::<usize, OddLevelAttribute>::new();
-
-                // e(g1, ri)
-                let pairing_g1_ri = GT::ate_pairing(&self.setup_params_1.g1, &link.signature.R);
-
-                let com_i_s = if i == 1 {
-                    // e(g1, ri)^{rho_sig*rho_s}
-                    GT::pow(&pairing_g1_ri, &(&rho_sig * &rho_s))
-                } else {
-                    // e(g1, ri)^{rho_sig*rho_s} * e(-g1, g2)^{blindings_vk[i-2]}
-                    let e_1 = GT::pow(&pairing_g1_ri, &(&rho_sig * &rho_s));
-                    let e_2 = GT::pow(&pairing_inv_groth1_g1_g2, &self.blindings_vk[i - 2]);
-                    GT::mul(&e_1, &e_2)
-                };
-
-                let unrevealed_attr_count = link.attribute_count() - revealed[i - 1].len();
-                let mut r_t = FieldElementVector::with_capacity(link.attribute_count());
-                let mut r_a = FieldElementVector::with_capacity(unrevealed_attr_count);
-                let mut com_t = Vec::<GT>::with_capacity(link.attribute_count());
-
-                // Last attribute is the verkey so skip for now
-                for j in 0..(link.attribute_count() - 1) {
-                    // blinding for t_{i, j}
-                    let rr_t = FieldElement::random();
-
-                    let mut com_i_t = if i == 1 {
-                        // e(g1, ri)^{rho_sig*rr_t}
-                        GT::pow(&pairing_g1_ri, &(&rho_sig * &rr_t))
-                    } else {
-                        // e(g1, ri)^{rho_sig*rr_t} * e(-y1_j, g2)^{blindings_vk[i-2]}
-                        // e(-y1_j, g2) equals e(y1_j, -g2)
-                        let e_1 = GT::pow(&pairing_g1_ri, &(&rho_sig * &rr_t));
-                        let e_2 = GT::ate_pairing(&self.setup_params_1.y[j], &groth2_neg_g2);
-                        let e_3 = GT::pow(&e_2, &self.blindings_vk[i - 2]);
-                        GT::mul(&e_1, &e_3)
-                    };
-
-                    if !revealed[i - 1].contains(&j) {
-                        // Unrevealed attribute
-                        // e(-g1, g2)^rr_a
-                        let rr_a = FieldElement::random();
-                        let e = GT::pow(&pairing_inv_groth1_g1_g2, &rr_a);
-                        // e(g1, ri)^{rho_sig*rr_t} * e(y1_j, g2)^{blindings_vk[i-2]} * e(-g1, g2)^rr_a
-                        com_i_t = GT::mul(&com_i_t, &e);
-                        r_a.push(rr_a);
-                    } else {
-                        rev_attrs.insert(j, link.attributes[j].clone());
-                    }
-                    com_t.push(com_i_t);
-                    r_t.push(rr_t);
-                }
-
-                odd_level_revealed_attributes.push(rev_attrs);
-
-                // For verkey
-                let rr_t = FieldElement::random();
-                let mut com_i_vk = {
-                    // e(g1, ri)^{rho_sig*rr_t} * e(-g1, g2)^rr_a
-                    let e_1 = GT::pow(&pairing_g1_ri, &(&rho_sig * &rr_t));
-                    let e_2 = GT::pow(&pairing_inv_groth1_g1_g2, &rho_vk);
-                    GT::mul(&e_1, &e_2)
-                };
-                if i != 1 {
-                    // Different from paper here, paper uses e(y1_j, g2) but e(-y1_j, g2) should be used and e(-y1_j, g2) equals e(y1_j, -g2)
-                    // e(y1_j, -g2)^{blindings_vk[i-2]}
-                    let e_1 = GT::ate_pairing(
-                        &self.setup_params_1.y[link.attribute_count() - 1],
-                        &groth1_neg_g2,
-                    );
-                    let e_2 = GT::pow(&e_1, &self.blindings_vk[i - 2]);
-                    // e(g1, ri)^{rho_sig*rr_t} * e(-g1, g2)^rr_a * e(y1_j, g2)^{blindings_vk[i-2]}
-                    com_i_vk = GT::mul(&com_i_vk, &e_2);
-                }
-                com_t.push(com_i_vk);
-                r_t.push(rr_t);
-
-                (r_t, r_a, com_i_s, com_t)
-            } else {
-                // Even levels
-                let link = self.cred_chain.get_even_link((i / 2) - 1)?;
-                self.even_level_blinded_sigs
-                    .push(link.signature.randomize(&rho_sig));
-
-                let mut rev_attrs = HashMap::<usize, EvenLevelAttribute>::new();
-
-                // e(ri, g2)
-                let pairing_ri_g2 = GT::ate_pairing(&link.signature.R, &self.setup_params_2.g2);
-
-                // e(ri, g2)^{rho_sig*rho_s} * e(-g1, g2)^{blindings_vk[i-2]}
-                let e_1 = GT::pow(&pairing_ri_g2, &(&rho_sig * &rho_s));
-                let e_2 = GT::pow(&pairing_inv_groth2_g1_g2, &self.blindings_vk[i - 2]);
-                let com_i_s = GT::mul(&e_1, &e_2);
-
-                let unrevealed_attr_count = link.attribute_count() - revealed[i - 1].len();
-                let mut r_t = FieldElementVector::with_capacity(link.attribute_count());
-                let mut r_a = FieldElementVector::with_capacity(unrevealed_attr_count);
-                let mut com_t = Vec::<GT>::with_capacity(link.attribute_count());
-
-                // Last attribute is the verkey so skip for now
-                for j in 0..(link.attribute_count() - 1) {
-                    // blinding for t_{i, j}
-                    let rr_t = FieldElement::random();
-
-                    // e(ri, g2)^{rho_sig*rr_t} * e(g1, -y2_j)^{blindings_vk[i-2]}.
-                    // e(g1, -y2_j) equals e(-g1, y2_j)
-                    let e_1 = GT::pow(&pairing_ri_g2, &(&rho_sig * &rr_t));
-                    let e_2 = GT::ate_pairing(&groth2_neg_g1, &self.setup_params_2.y[j]);
-                    let e_3 = GT::pow(&e_2, &self.blindings_vk[i - 2]);
-                    let mut com_i_t = GT::mul(&e_1, &e_3);
-
-                    if !revealed[i - 1].contains(&j) {
-                        // Unrevealed attribute
-                        // e(ri, g2)^{rho_sig*rr_t} * e(g1, -y2_j)^{blindings_vk[i-2]} * e(-g1, g2)^rr_a
-                        // In above, replace e(g1, -y2_j)^{blindings_vk[i-2]} with e(-g1, y2_j)^{blindings_vk[i-2]}
-                        let rr_a = FieldElement::random();
-                        let e = GT::pow(&pairing_inv_groth2_g1_g2, &rr_a);
-                        com_i_t = GT::mul(&com_i_t, &e);
-                        r_a.push(rr_a);
-                    } else {
-                        rev_attrs.insert(j, link.attributes[j].clone());
-                    }
-                    com_t.push(com_i_t);
-                    r_t.push(rr_t);
-                }
-
-                even_level_revealed_attributes.push(rev_attrs);
-
-                // For verkey
-                let rr_t = FieldElement::random();
-                // e(ri, g2)^{rho_sig*rr_t} * e(-g1, g2)^rr_a * e(g1, -y2_j)^{blindings_vk[i-2]}
-                // In above, replace e(g1, -y2_j)^{blindings_vk[i-2]} with e(-g1, y2_j)^{blindings_vk[i-2]}
-                let e_1 = GT::pow(&pairing_ri_g2, &(&rho_sig * &rr_t));
-                let e_2 = GT::pow(&pairing_inv_groth1_g1_g2, &rho_vk);
-                let e_3 = GT::ate_pairing(
-                    &groth2_neg_g1,
-                    &self.setup_params_2.y[link.attribute_count() - 1],
-                );
-                let e_4 = GT::pow(&e_3, &self.blindings_vk[i - 2]);
-                let com_i_vk = GT::mul(&GT::mul(&e_1, &e_2), &e_4);
-
-                com_t.push(com_i_vk);
-                r_t.push(rr_t);
-
-                (r_t, r_a, com_i_s, com_t)
-            };
-
-            self.blindings_sigs.push(rho_sig);
-            self.blindings_s.push(rho_s);
-            self.blindings_vk.push(rho_vk);
-            self.blindings_t.push(rho_t);
-            self.blindings_a.push(rho_a);
-            comms_s.push(com_s);
-            comms_t.push(com_t);
-        }
-        let odd_level_blinded_r: G2Vector = self
-            .odd_level_blinded_sigs
-            .iter()
-            .map(|sig| sig.R.clone())
-            .collect::<Vec<G2>>()
-            .into();
-        let even_level_blinded_r: G1Vector = self
-            .even_level_blinded_sigs
-            .iter()
-            .map(|sig| sig.R.clone())
-            .collect::<Vec<G1>>()
-            .into();
-
-        Ok(AttributeTokenComm {
-            odd_level_blinded_r,
-            even_level_blinded_r,
-            comms_s,
-            comms_t,
-            odd_level_revealed_attributes,
-            even_level_revealed_attributes,
-        })
+        let precomputed_setup_vals =
+            PrecompOnSetupParams::new(&self.setup_params_1, &self.setup_params_2);
+        let precomputed_sig_vals =
+            PrecompOnCredChain::new(&self.cred_chain, &self.setup_params_1, &self.setup_params_2)?;
+        self.commitment_with_precomputation(
+            revealed,
+            &precomputed_setup_vals,
+            &precomputed_sig_vals,
+        )
     }
 
     pub fn response(
@@ -373,7 +282,6 @@ impl<'a> AttributeToken<'a> {
 
                 even_level_resp_s.push(binary_scalar_mul_g2(
                     &self.setup_params_2.g2,
-                    //&link.signature.S,
                     &self.even_level_blinded_sigs[(i / 2) - 1].S,
                     &self.blindings_s[i - 1],
                     challenge,
@@ -403,7 +311,6 @@ impl<'a> AttributeToken<'a> {
                 for j in 0..link.attribute_count() {
                     resp_t.push(binary_scalar_mul_g2(
                         &self.setup_params_2.g2,
-                        //&link.signature.T[j],
                         &self.even_level_blinded_sigs[(i / 2) - 1].T[j],
                         &self.blindings_t[i - 1][j],
                         challenge,
@@ -462,18 +369,17 @@ impl<'a> AttributeToken<'a> {
     ) -> DelgResult<AttributeTokenComm> {
         assert_eq!(comm.comms_s.len(), L);
         assert_eq!(comm.comms_t.len(), L);
-        assert!(setup_params_1.y.len() >= L);
-        assert!(setup_params_2.y.len() >= L);
+        // TODO: Check that y in setup params satisfies attribute count
 
         let mut comms_s = Vec::<GT>::with_capacity(L);
         let mut comms_t = Vec::<Vec<GT>>::with_capacity(L);
 
         // In practice, g1 and g2 in both Groth1 and Groth2 can be same
-        // XXX: Precompute
-        let groth1_neg_g1 = setup_params_1.g1.negation();
-        let groth1_neg_g2 = setup_params_1.g2.negation();
-        let groth2_neg_g1 = setup_params_2.g1.negation();
-        let groth2_neg_g2 = setup_params_2.g2.negation();
+        // The following can be precomputed if performance is critical
+        let groth1_neg_g1 = -&setup_params_1.g1;
+        let groth1_neg_g2 = -&setup_params_1.g2;
+        let groth2_neg_g1 = -&setup_params_2.g1;
+        let groth2_neg_g2 = -&setup_params_2.g2;
 
         let challenge_neg = challenge.negation();
         // g1^-c
@@ -484,38 +390,29 @@ impl<'a> AttributeToken<'a> {
         let ipk_c = &ipk.0 * &challenge_neg;
         // e(y0, g2)^{-c}
         let y0_g2_c = {
-            // XXX: Precompute
+            // e(y0, g2) can be precomputed
             let e_1 = GT::ate_pairing(&setup_params_1.y[0], &setup_params_1.g2);
             GT::pow(&e_1, &challenge_neg)
         };
-        // e(g1, y0)^{-c}
-        let g1_y0_c = {
-            // XXX: Precompute e(g1, y[0])
-            /*let e_1 = GT::ate_pairing(&setup_params_2.g1, &setup_params_2.y[0]);
-            GT::pow(&e_1, &challenge_neg)*/
-            GT::ate_pairing(&groth2_g1_c, &setup_params_2.y[0])
-        };
+        // e(g1, y0)^{-c} = e(g1^{-c}, y0)
+        let g1_y0_c = GT::ate_pairing(&groth2_g1_c, &setup_params_2.y[0]);
 
         for i in 1..=L {
             if i % 2 == 1 {
                 // Odd level
-                // XXX: e(y[j], ipk)^-c can be changed to e(y[j], ipk^-c) and ipk^-c can be computed once for all odd levels.
+                // e(y[j], ipk)^-c can be changed to e(y[j], ipk^-c) and ipk^-c can be computed once for all odd levels.
                 // Then e(y[j], ipk)^-c can then be used in a multi-pairing.
-                // Otherwise precompute e(y[j], ipk) for all j
                 let com_i_s = if i == 1 {
-                    // e(resp_s_i, r'_i)
-                    let e_1 = GT::ate_pairing(
+                    // e(resp_s_i, r'_i) * e(g1, ipk)^-c
+                    // e(g1, ipk)^-c == e(g1, ipk^-c) => e(resp_s_i, r'_i) * e(g1, ipk^-c)
+                    let e_1 = GT::ate_2_pairing(
                         &resp.odd_level_resp_s[i / 2],
                         &comm.odd_level_blinded_r[i / 2],
+                        &setup_params_1.g1,
+                        &ipk_c,
                     );
-                    // XXX: e(g1, ipk) can be precomputed
-                    let e_2 = GT::ate_pairing(&setup_params_1.g1, &ipk.0);
-                    // e(g1, ipk)^-c
-                    let e_3 = GT::pow(&e_2, &challenge_neg);
-                    // e(g1, ipk)^-c * e(y0, g2)^-c = ( e(g1, ipk) * e(y0, g2) )^-c
-                    let e_4 = GT::mul(&e_3, &y0_g2_c);
                     // e(resp_s_i, r'_i) * ( e(g1, ipk) * e(y0, g2) )^-c
-                    GT::mul(&e_1, &e_4)
+                    GT::mul(&e_1, &y0_g2_c)
                 } else {
                     let e_1 = GT::ate_2_pairing(
                         &resp.odd_level_resp_s[i / 2],
@@ -708,6 +605,484 @@ impl<'a> AttributeToken<'a> {
                     );
                     let e_2 = GT::ate_pairing(&groth2_neg_g1, &setup_params_2.g2);
                     let e_3 = GT::pow(&e_2, &resp.resp_csk);
+                    GT::mul(&e_1, &e_3)
+                };
+                com_t.push(com_i_vk);
+                comms_t.push(com_t);
+            }
+        }
+
+        let mut reconstructed_comm = comm.clone();
+        reconstructed_comm.comms_s = comms_s;
+        reconstructed_comm.comms_t = comms_t;
+        Ok(reconstructed_comm)
+    }
+
+    pub fn commitment_with_precomputation_on_setup_params(
+        &mut self,
+        revealed: Vec<HashSet<usize>>,
+        precomputed: &PrecompOnSetupParams,
+    ) -> DelgResult<AttributeTokenComm> {
+        let precomputed_sig_vals =
+            PrecompOnCredChain::new(&self.cred_chain, &self.setup_params_1, &self.setup_params_2)?;
+        self.commitment_with_precomputation(revealed, precomputed, &precomputed_sig_vals)
+    }
+
+    pub fn commitment_with_precomputation(
+        &mut self,
+        revealed: Vec<HashSet<usize>>,
+        precomp_setup: &PrecompOnSetupParams,
+        precomp_chain: &PrecompOnCredChain,
+    ) -> DelgResult<AttributeTokenComm> {
+        assert_eq!(revealed.len(), self.L);
+
+        // In practice, g1 and g2 in both Groth1 and Groth2 can be same
+        // The following can be precomputed if performance is critical
+        let groth1_neg_g1 = -&self.setup_params_1.g1;
+        let groth1_neg_g2 = -&self.setup_params_1.g2;
+        let groth2_neg_g1 = -&self.setup_params_2.g1;
+        let groth2_neg_g2 = -&self.setup_params_2.g2;
+
+        let mut odd_level_revealed_attributes =
+            Vec::<HashMap<usize, OddLevelAttribute>>::with_capacity(self.L);
+        let mut even_level_revealed_attributes =
+            Vec::<HashMap<usize, EvenLevelAttribute>>::with_capacity(self.L);
+        let mut comms_s = Vec::<GT>::with_capacity(self.L);
+        let mut comms_t = Vec::<Vec<GT>>::with_capacity(self.L);
+
+        for i in 1..=self.L {
+            let rho_sig = FieldElement::random();
+            let rho_s = FieldElement::random();
+            let rho_vk = FieldElement::random();
+
+            let (rho_t, rho_a, com_s, com_t) = if i % 2 == 1 {
+                // Odd levels
+                let link = self.cred_chain.get_odd_link(i / 2)?;
+                self.odd_level_blinded_sigs
+                    .push(link.signature.randomize(&rho_sig));
+
+                let mut rev_attrs = HashMap::<usize, OddLevelAttribute>::new();
+
+                // e(g1, r_i)
+                let pairing_g1_r_i = &precomp_chain.pairing_g_r[i - 1];
+
+                let com_i_s = if i == 1 {
+                    // e(g1, ri)^{rho_sig*rho_s}
+                    GT::pow(pairing_g1_r_i, &(&rho_sig * &rho_s))
+                } else {
+                    // e(g1, ri)^{rho_sig*rho_s} * e(-g1, g2)^{blindings_vk[i-2]}
+                    let e_1 = GT::pow(pairing_g1_r_i, &(&rho_sig * &rho_s));
+                    let e_2 = GT::pow(
+                        &precomp_setup.pairing_inv_groth1_g1_g2,
+                        &self.blindings_vk[i - 2],
+                    );
+                    GT::mul(&e_1, &e_2)
+                };
+
+                let unrevealed_attr_count = link.attribute_count() - revealed[i - 1].len();
+                let mut r_t = FieldElementVector::with_capacity(link.attribute_count());
+                let mut r_a = FieldElementVector::with_capacity(unrevealed_attr_count);
+                let mut com_t = Vec::<GT>::with_capacity(link.attribute_count());
+
+                // Last attribute is the verkey so skip for now
+                for j in 0..(link.attribute_count() - 1) {
+                    // blinding for t_{i, j}
+                    let rr_t = FieldElement::random();
+
+                    let mut com_i_t = if i == 1 {
+                        // e(g1, ri)^{rho_sig*rr_t}
+                        GT::pow(pairing_g1_r_i, &(&rho_sig * &rr_t))
+                    } else {
+                        // e(g1, ri)^{rho_sig*rr_t} * e(-y1_j, g2)^{blindings_vk[i-2]}
+                        // e(-y1_j, g2) equals e(y1_j, -g2)
+                        let e_1 = GT::pow(pairing_g1_r_i, &(&rho_sig * &rr_t));
+                        let e_2 = precomp_setup.groth1_neg_y_g2[j].clone();
+                        let e_3 = GT::pow(&e_2, &self.blindings_vk[i - 2]);
+                        GT::mul(&e_1, &e_3)
+                    };
+
+                    if !revealed[i - 1].contains(&j) {
+                        // Unrevealed attribute
+                        // e(-g1, g2)^rr_a
+                        let rr_a = FieldElement::random();
+                        let e = GT::pow(&precomp_setup.pairing_inv_groth1_g1_g2, &rr_a);
+                        // e(g1, ri)^{rho_sig*rr_t} * e(y1_j, g2)^{blindings_vk[i-2]} * e(-g1, g2)^rr_a
+                        com_i_t = GT::mul(&com_i_t, &e);
+                        r_a.push(rr_a);
+                    } else {
+                        rev_attrs.insert(j, link.attributes[j].clone());
+                    }
+                    com_t.push(com_i_t);
+                    r_t.push(rr_t);
+                }
+
+                odd_level_revealed_attributes.push(rev_attrs);
+
+                // For verkey
+                let rr_t = FieldElement::random();
+                let mut com_i_vk = {
+                    // e(g1, ri)^{rho_sig*rr_t} * e(-g1, g2)^rr_a
+                    let e_1 = GT::pow(pairing_g1_r_i, &(&rho_sig * &rr_t));
+                    let e_2 = GT::pow(&precomp_setup.pairing_inv_groth1_g1_g2, &rho_vk);
+                    GT::mul(&e_1, &e_2)
+                };
+                if i != 1 {
+                    // Different from paper here, paper uses e(y1_j, g2) but e(-y1_j, g2) should be used and e(-y1_j, g2) equals e(y1_j, -g2)
+                    // e(y1_j, -g2)^{blindings_vk[i-2]}
+                    let e_1 = precomp_setup.groth1_neg_y_g2[link.attribute_count() - 1].clone();
+                    let e_2 = GT::pow(&e_1, &self.blindings_vk[i - 2]);
+                    // e(g1, ri)^{rho_sig*rr_t} * e(-g1, g2)^rr_a * e(y1_j, g2)^{blindings_vk[i-2]}
+                    com_i_vk = GT::mul(&com_i_vk, &e_2);
+                }
+                com_t.push(com_i_vk);
+                r_t.push(rr_t);
+
+                (r_t, r_a, com_i_s, com_t)
+            } else {
+                // Even levels
+                let link = self.cred_chain.get_even_link((i / 2) - 1)?;
+                self.even_level_blinded_sigs
+                    .push(link.signature.randomize(&rho_sig));
+
+                let mut rev_attrs = HashMap::<usize, EvenLevelAttribute>::new();
+
+                // e(r_i, g2)
+                let pairing_r_i_g2 = &precomp_chain.pairing_g_r[i - 1];
+
+                // e(ri, g2)^{rho_sig*rho_s} * e(-g1, g2)^{blindings_vk[i-2]}
+                let e_1 = GT::pow(pairing_r_i_g2, &(&rho_sig * &rho_s));
+                let e_2 = GT::pow(
+                    &precomp_setup.pairing_inv_groth2_g1_g2,
+                    &self.blindings_vk[i - 2],
+                );
+                let com_i_s = GT::mul(&e_1, &e_2);
+
+                let unrevealed_attr_count = link.attribute_count() - revealed[i - 1].len();
+                let mut r_t = FieldElementVector::with_capacity(link.attribute_count());
+                let mut r_a = FieldElementVector::with_capacity(unrevealed_attr_count);
+                let mut com_t = Vec::<GT>::with_capacity(link.attribute_count());
+
+                // Last attribute is the verkey so skip for now
+                for j in 0..(link.attribute_count() - 1) {
+                    // blinding for t_{i, j}
+                    let rr_t = FieldElement::random();
+
+                    // e(ri, g2)^{rho_sig*rr_t} * e(g1, -y2_j)^{blindings_vk[i-2]}.
+                    // e(g1, -y2_j) equals e(-g1, y2_j)
+                    let e_1 = GT::pow(pairing_r_i_g2, &(&rho_sig * &rr_t));
+                    let e_2 = precomp_setup.groth2_neg_g1_y[j].clone();
+                    let e_3 = GT::pow(&e_2, &self.blindings_vk[i - 2]);
+                    let mut com_i_t = GT::mul(&e_1, &e_3);
+
+                    if !revealed[i - 1].contains(&j) {
+                        // Unrevealed attribute
+                        // e(ri, g2)^{rho_sig*rr_t} * e(g1, -y2_j)^{blindings_vk[i-2]} * e(-g1, g2)^rr_a
+                        // In above, replace e(g1, -y2_j)^{blindings_vk[i-2]} with e(-g1, y2_j)^{blindings_vk[i-2]}
+                        let rr_a = FieldElement::random();
+                        let e = GT::pow(&precomp_setup.pairing_inv_groth2_g1_g2, &rr_a);
+                        com_i_t = GT::mul(&com_i_t, &e);
+                        r_a.push(rr_a);
+                    } else {
+                        rev_attrs.insert(j, link.attributes[j].clone());
+                    }
+                    com_t.push(com_i_t);
+                    r_t.push(rr_t);
+                }
+
+                even_level_revealed_attributes.push(rev_attrs);
+
+                // For verkey
+                let rr_t = FieldElement::random();
+                // e(ri, g2)^{rho_sig*rr_t} * e(-g1, g2)^rr_a * e(g1, -y2_j)^{blindings_vk[i-2]}
+                // In above, replace e(g1, -y2_j)^{blindings_vk[i-2]} with e(-g1, y2_j)^{blindings_vk[i-2]}
+                let e_1 = GT::pow(pairing_r_i_g2, &(&rho_sig * &rr_t));
+                let e_2 = GT::pow(&precomp_setup.pairing_inv_groth2_g1_g2, &rho_vk);
+                let e_3 = precomp_setup.groth2_neg_g1_y[link.attribute_count() - 1].clone();
+                let e_4 = GT::pow(&e_3, &self.blindings_vk[i - 2]);
+                let com_i_vk = GT::mul(&GT::mul(&e_1, &e_2), &e_4);
+
+                com_t.push(com_i_vk);
+                r_t.push(rr_t);
+
+                (r_t, r_a, com_i_s, com_t)
+            };
+
+            self.blindings_sigs.push(rho_sig);
+            self.blindings_s.push(rho_s);
+            self.blindings_vk.push(rho_vk);
+            self.blindings_t.push(rho_t);
+            self.blindings_a.push(rho_a);
+            comms_s.push(com_s);
+            comms_t.push(com_t);
+        }
+        let odd_level_blinded_r: G2Vector = self
+            .odd_level_blinded_sigs
+            .iter()
+            .map(|sig| sig.R.clone())
+            .collect::<Vec<G2>>()
+            .into();
+        let even_level_blinded_r: G1Vector = self
+            .even_level_blinded_sigs
+            .iter()
+            .map(|sig| sig.R.clone())
+            .collect::<Vec<G1>>()
+            .into();
+
+        Ok(AttributeTokenComm {
+            odd_level_blinded_r,
+            even_level_blinded_r,
+            comms_s,
+            comms_t,
+            odd_level_revealed_attributes,
+            even_level_revealed_attributes,
+        })
+    }
+
+    pub fn reconstruct_commitment_with_precomputed_vals(
+        L: usize,
+        comm: &AttributeTokenComm,
+        resp: &AttributeTokenResp,
+        challenge: &FieldElement,
+        revealed: Vec<HashSet<usize>>,
+        ipk: &Groth1Verkey,
+        setup_params_1: &Groth1SetupParams,
+        setup_params_2: &Groth2SetupParams,
+        precomputed: &PrecompForCommitmentReconstitution,
+    ) -> DelgResult<AttributeTokenComm> {
+        assert_eq!(comm.comms_s.len(), L);
+        assert_eq!(comm.comms_t.len(), L);
+        // TODO: Check that y in setup params satisfies attribute count
+
+        let mut comms_s = Vec::<GT>::with_capacity(L);
+        let mut comms_t = Vec::<Vec<GT>>::with_capacity(L);
+
+        // In practice, g1 and g2 in both Groth1 and Groth2 can be same
+        // The following can be precomputed if performance is critical
+        let groth1_neg_g1 = -&setup_params_1.g1;
+        let groth1_neg_g2 = -&setup_params_1.g2;
+        let groth2_neg_g1 = -&setup_params_2.g1;
+        let groth2_neg_g2 = -&setup_params_2.g2;
+
+        let challenge_neg = challenge.negation();
+        // g1^-c
+        let groth2_g1_c = &setup_params_2.g1 * &challenge_neg;
+        // g2^-c
+        let groth1_g2_c = &setup_params_1.g2 * &challenge_neg;
+        // ipk^-c
+        let ipk_c = &ipk.0 * &challenge_neg;
+        // e(y0, g2)^{-c}
+        let y0_g2_c = GT::pow(&precomputed.groth1_y0_g2, &challenge_neg);
+        // e(g1, y0)^{-c}
+        let g1_y0_c = GT::pow(&precomputed.groth2_g1_y0, &challenge_neg);
+
+        for i in 1..=L {
+            if i % 2 == 1 {
+                // Odd level
+                // Use precomputed e(y[j], ipk) for all j
+                let com_i_s = if i == 1 {
+                    // e(resp_s_i, r'_i)
+                    let e_1 = GT::ate_pairing(
+                        &resp.odd_level_resp_s[i / 2],
+                        &comm.odd_level_blinded_r[i / 2],
+                    );
+                    // e(g1, ipk)^-c * e(y0, g2)^-c = ( e(g1, ipk) * e(y0, g2) )^-c
+                    // e(g1, ipk) * e(y0, g2)
+                    let e_2 = GT::mul(&precomputed.groth1_g1_ipk, &precomputed.groth1_y0_g2);
+                    // ( e(g1, ipk) * e(y0, g2) )^-c
+                    let e_3 = GT::pow(&e_2, &challenge_neg);
+                    // e(resp_s_i, r'_i) * ( e(g1, ipk) * e(y0, g2) )^-c
+                    GT::mul(&e_1, &e_3)
+                } else {
+                    let e_1 = GT::ate_2_pairing(
+                        &resp.odd_level_resp_s[i / 2],
+                        &comm.odd_level_blinded_r[i / 2],
+                        &groth1_neg_g1,
+                        &resp.even_level_resp_vk[(i / 2) - 1],
+                    );
+                    GT::mul(&e_1, &y0_g2_c)
+                };
+                comms_s.push(com_i_s);
+
+                let attr_count = comm.comms_t[i - 1].len();
+                let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
+                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
+                let mut k = 0;
+
+                // Last attribute is the verkey so skip for now
+                for j in 0..(attr_count - 1) {
+                    if !revealed[i - 1].contains(&j) {
+                        if i == 1 {
+                            let e_1 = GT::ate_2_pairing(
+                                &resp.odd_level_resp_t[i / 2][j],
+                                &comm.odd_level_blinded_r[i / 2],
+                                &resp.odd_level_resp_a[i / 2][k],
+                                &groth1_neg_g2,
+                            );
+                            let e_2 = GT::pow(&precomputed.groth1_y_ipk[j], &challenge_neg);
+                            com_t.push(GT::mul(&e_1, &e_2));
+                        } else {
+                            com_t.push(GT::ate_multi_pairing(vec![
+                                (
+                                    &resp.odd_level_resp_t[i / 2][j],
+                                    &comm.odd_level_blinded_r[i / 2],
+                                ),
+                                (&resp.odd_level_resp_a[i / 2][k], &groth1_neg_g2),
+                                (
+                                    &(setup_params_1.y[j].negation()),
+                                    &resp.even_level_resp_vk[(i / 2) - 1],
+                                ),
+                            ]));
+                        }
+                        k += 1;
+                    } else {
+                        if i == 1 {
+                            let e_1 = GT::ate_2_pairing(
+                                &resp.odd_level_resp_t[i / 2][j],
+                                &comm.odd_level_blinded_r[i / 2],
+                                &comm.odd_level_revealed_attributes[i / 2][&j],
+                                &groth1_g2_c,
+                            );
+                            let e_2 = GT::pow(&precomputed.groth1_y_ipk[j], &challenge_neg);
+                            com_t.push(GT::mul(&e_1, &e_2));
+                        } else {
+                            com_t.push(GT::ate_multi_pairing(vec![
+                                (
+                                    &resp.odd_level_resp_t[i / 2][j],
+                                    &comm.odd_level_blinded_r[i / 2],
+                                ),
+                                (
+                                    &(setup_params_1.y[j].negation()),
+                                    &resp.even_level_resp_vk[(i / 2) - 1],
+                                ),
+                                (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c),
+                            ]));
+                        }
+                    }
+                }
+
+                // For verkey
+                let com_i_vk = if i == 1 {
+                    if i != L {
+                        let e_1 = GT::ate_2_pairing(
+                            &resp.odd_level_resp_t[i / 2][attr_count - 1],
+                            &comm.odd_level_blinded_r[i / 2],
+                            &resp.odd_level_resp_vk[i / 2],
+                            &groth1_neg_g2,
+                        );
+                        let e_2 =
+                            GT::pow(&precomputed.groth1_y_ipk[attr_count - 1], &challenge_neg);
+                        GT::mul(&e_1, &e_2)
+                    } else {
+                        let e_1 = GT::ate_pairing(
+                            &resp.odd_level_resp_t[i / 2][attr_count - 1],
+                            &comm.odd_level_blinded_r[i / 2],
+                        );
+                        let e_3 = GT::pow(&precomputed.pairing_inv_groth1_g1_g2, &resp.resp_csk);
+                        let e_4 = GT::mul(&e_1, &e_3);
+                        let e_5 =
+                            GT::pow(&precomputed.groth1_y_ipk[attr_count - 1], &challenge_neg);
+                        GT::mul(&e_4, &e_5)
+                    }
+                } else {
+                    if i != L {
+                        GT::ate_multi_pairing(vec![
+                            (
+                                &resp.odd_level_resp_t[i / 2][attr_count - 1],
+                                &comm.odd_level_blinded_r[i / 2],
+                            ),
+                            (
+                                &(setup_params_1.y[attr_count - 1].negation()),
+                                &resp.even_level_resp_vk[(i / 2) - 1],
+                            ),
+                            (&resp.odd_level_resp_vk[i / 2], &groth1_neg_g2),
+                        ])
+                    } else {
+                        let e_1 = GT::ate_2_pairing(
+                            &resp.odd_level_resp_t[i / 2][attr_count - 1],
+                            &comm.odd_level_blinded_r[i / 2],
+                            &(setup_params_1.y[attr_count - 1].negation()),
+                            &resp.even_level_resp_vk[(i / 2) - 1],
+                        );
+                        let e_3 = GT::pow(&precomputed.pairing_inv_groth1_g1_g2, &resp.resp_csk);
+                        GT::mul(&e_1, &e_3)
+                    }
+                };
+                com_t.push(com_i_vk);
+                comms_t.push(com_t);
+            } else {
+                // Even level
+                let e_1 = GT::ate_2_pairing(
+                    &comm.even_level_blinded_r[(i / 2) - 1],
+                    &resp.even_level_resp_s[(i / 2) - 1],
+                    &resp.odd_level_resp_vk[(i / 2) - 1],
+                    &groth2_neg_g2,
+                );
+                let com_i_s = GT::mul(&e_1, &g1_y0_c);
+                comms_s.push(com_i_s);
+
+                let attr_count = comm.comms_t[i - 1].len();
+                let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
+                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
+                let mut k = 0;
+
+                // Last attribute is the verkey so skip for now
+                for j in 0..(attr_count - 1) {
+                    if !revealed[i - 1].contains(&j) {
+                        com_t.push(GT::ate_multi_pairing(vec![
+                            // XXX: -y[j] can be pre-computed
+                            (
+                                &resp.odd_level_resp_vk[(i / 2) - 1],
+                                &(setup_params_2.y[j].negation()),
+                            ),
+                            (
+                                &comm.even_level_blinded_r[(i / 2) - 1],
+                                &resp.even_level_resp_t[(i / 2) - 1][j],
+                            ),
+                            (&groth2_neg_g1, &resp.even_level_resp_a[(i / 2) - 1][k]),
+                        ]));
+                        k += 1;
+                    } else {
+                        com_t.push({
+                            // XXX: -y[j] can be pre-computed
+                            GT::ate_multi_pairing(vec![
+                                (
+                                    &resp.odd_level_resp_vk[(i / 2) - 1],
+                                    &(setup_params_2.y[j].negation()),
+                                ),
+                                (
+                                    &comm.even_level_blinded_r[(i / 2) - 1],
+                                    &resp.even_level_resp_t[(i / 2) - 1][j],
+                                ),
+                                (
+                                    &groth2_g1_c,
+                                    &comm.even_level_revealed_attributes[(i / 2) - 1][&j],
+                                ),
+                            ])
+                        });
+                    }
+                }
+
+                // For verkey
+                let com_i_vk = if i != L {
+                    GT::ate_multi_pairing(vec![
+                        (
+                            &comm.even_level_blinded_r[(i / 2) - 1],
+                            &resp.even_level_resp_t[(i / 2) - 1][attr_count - 1],
+                        ),
+                        (
+                            &resp.odd_level_resp_vk[(i / 2) - 1],
+                            &(setup_params_2.y[attr_count - 1].negation()),
+                        ),
+                        (&groth2_neg_g1, &resp.even_level_resp_vk[(i / 2) - 1]),
+                    ])
+                } else {
+                    let e_1 = GT::ate_2_pairing(
+                        &comm.even_level_blinded_r[(i / 2) - 1],
+                        &resp.even_level_resp_t[(i / 2) - 1][attr_count - 1],
+                        &resp.odd_level_resp_vk[(i / 2) - 1],
+                        &(setup_params_2.y[attr_count - 1].negation()),
+                    );
+                    let e_3 = GT::pow(&precomputed.pairing_inv_groth2_g1_g2, &resp.resp_csk);
                     GT::mul(&e_1, &e_3)
                 };
                 com_t.push(com_i_vk);
@@ -1486,5 +1861,244 @@ mod tests {
         assert_eq!(c_4, recon_c_4);
         println!("For delegation chain of length {}, commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}", L,
                  com_duration, resp_duration, recon_duration, com_duration + resp_duration);
+    }
+
+    #[test]
+    fn test_attribute_token_with_precomputation() {
+        let max_attributes = 6;
+        let chain_size = 10;
+        let label = "test".as_bytes();
+
+        println!(
+            "Each credential will have {} attributes",
+            max_attributes - 1
+        );
+
+        let params1 = GrothS1::setup(max_attributes, label);
+        let params2 = GrothS2::setup(max_attributes, label);
+
+        let precomputed_setup_params = PrecompOnSetupParams::new(&params1, &params2);
+
+        let l_0_issuer = EvenLevelIssuer::new(0).unwrap();
+        let mut odd_level_issuers = vec![];
+        let mut even_level_issuers = vec![];
+        for i in 1..=chain_size {
+            if i % 2 == 1 {
+                odd_level_issuers.push(OddLevelIssuer::new(i).unwrap());
+            } else {
+                even_level_issuers.push(EvenLevelIssuer::new(i).unwrap());
+            }
+        }
+
+        let (l_0_issuer_sk, l_0_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+        let mut odd_level_issuer_keys = vec![];
+        let mut even_level_issuer_keys = vec![];
+        for i in 1..=chain_size {
+            if i % 2 == 1 {
+                odd_level_issuer_keys.push(OddLevelIssuer::keygen(&params2));
+            } else {
+                even_level_issuer_keys.push(EvenLevelIssuer::keygen(&params1));
+            }
+        }
+
+        let precomp_for_commit_recons =
+            PrecompForCommitmentReconstitution::new(&l_0_issuer_vk, &params1, &params2);
+
+        let mut even_level_vks = vec![];
+        let mut odd_level_vks = vec![];
+        let mut odd_level_attributes = vec![];
+        let mut even_level_attributes = vec![];
+        let mut chains = Vec::<CredChain>::new();
+        for i in 1..=chain_size {
+            let chain = if i % 2 == 1 {
+                odd_level_vks.push(&odd_level_issuer_keys[i / 2].1);
+                let attributes: G1Vector = (0..max_attributes - 1)
+                    .map(|_| G1::random())
+                    .collect::<Vec<G1>>()
+                    .into();
+                let chain = if i == 1 {
+                    let cred_link = l_0_issuer
+                        .delegate(
+                            attributes.clone(),
+                            odd_level_issuer_keys[0].1.clone(),
+                            &l_0_issuer_sk,
+                            &params1,
+                        )
+                        .unwrap();
+                    let mut chain = CredChain::new();
+                    chain.extend_with_odd(cred_link).unwrap();
+                    chain
+                } else {
+                    let cred_link = even_level_issuers[(i / 2) - 1]
+                        .delegate(
+                            attributes.clone(),
+                            odd_level_issuer_keys[i / 2].1.clone(),
+                            &even_level_issuer_keys[(i / 2) - 1].0,
+                            &params1,
+                        )
+                        .unwrap();
+                    let mut chain = chains[i - 2].clone();
+                    chain.extend_with_odd(cred_link).unwrap();
+                    chain
+                };
+                odd_level_attributes.push(attributes);
+                chain
+            } else {
+                even_level_vks.push(&even_level_issuer_keys[(i / 2) - 1].1);
+                let attributes: G2Vector = (0..max_attributes - 1)
+                    .map(|_| G2::random())
+                    .collect::<Vec<G2>>()
+                    .into();
+                let cred_link = odd_level_issuers[(i / 2) - 1]
+                    .delegate(
+                        attributes.clone(),
+                        even_level_issuer_keys[(i / 2) - 1].1.clone(),
+                        &odd_level_issuer_keys[(i / 2) - 1].0,
+                        &params2,
+                    )
+                    .unwrap();
+                let mut chain = chains[i - 2].clone();
+                chain.extend_with_even(cred_link).unwrap();
+                even_level_attributes.push(attributes);
+                chain
+            };
+
+            let precomp_sig_vals = PrecompOnCredChain::new(&chain, &params1, &params2).unwrap();
+            chains.push(chain);
+
+            let mut at = AttributeToken::new(&chains[i - 1], &params1, &params2);
+
+            // To be used with precompute checks
+            let mut at_1 = at.clone();
+            let mut at_2 = at.clone();
+
+            let start = Instant::now();
+            let com = at.commitment(vec![HashSet::<usize>::new(); i]).unwrap();
+            let com_duration = start.elapsed();
+
+            let start = Instant::now();
+            let com_precomp_setup = at_1
+                .commitment_with_precomputation_on_setup_params(
+                    vec![HashSet::<usize>::new(); i],
+                    &precomputed_setup_params,
+                )
+                .unwrap();
+            let com_precomp_setup_duration = start.elapsed();
+
+            let start = Instant::now();
+            let com_precomp = at_2
+                .commitment_with_precomputation(
+                    vec![HashSet::<usize>::new(); i],
+                    &precomputed_setup_params,
+                    &precomp_sig_vals,
+                )
+                .unwrap();
+            let com_precomp_duration = start.elapsed();
+
+            let c = AttributeToken::gen_challenge(&com, &l_0_issuer_vk);
+            let c_precomp_setup = AttributeToken::gen_challenge(&com_precomp_setup, &l_0_issuer_vk);
+            let c_precomp = AttributeToken::gen_challenge(&com_precomp, &l_0_issuer_vk);
+
+            let sk = if i % 2 == 1 {
+                let sk = &odd_level_issuer_keys[i / 2].0;
+                &sk.0
+            } else {
+                let sk = &even_level_issuer_keys[(i / 2) - 1].0;
+                &sk.0
+            };
+            let start = Instant::now();
+            let resp = at
+                .response(&com, sk, &c, even_level_vks.clone(), odd_level_vks.clone())
+                .unwrap();
+            let resp_duration = start.elapsed();
+
+            let resp_precomp_setup = at_1
+                .response(
+                    &com_precomp_setup,
+                    sk,
+                    &c_precomp_setup,
+                    even_level_vks.clone(),
+                    odd_level_vks.clone(),
+                )
+                .unwrap();
+            let resp_precomp = at_2
+                .response(
+                    &com_precomp,
+                    sk,
+                    &c_precomp,
+                    even_level_vks.clone(),
+                    odd_level_vks.clone(),
+                )
+                .unwrap();
+
+            let L = com.comms_s.len();
+
+            let start = Instant::now();
+            let recon_com = AttributeToken::reconstruct_commitment(
+                L,
+                &com,
+                &resp,
+                &c,
+                vec![HashSet::<usize>::new(); i],
+                &l_0_issuer_vk,
+                &params1,
+                &params2,
+            )
+            .unwrap();
+            let recon_duration = start.elapsed();
+
+            let recon_c = AttributeToken::gen_challenge(&recon_com, &l_0_issuer_vk);
+            assert_eq!(c, recon_c);
+
+            let start = Instant::now();
+            let recon_precomp_setup_com =
+                AttributeToken::reconstruct_commitment_with_precomputed_vals(
+                    L,
+                    &com_precomp_setup,
+                    &resp_precomp_setup,
+                    &c_precomp_setup,
+                    vec![HashSet::<usize>::new(); i],
+                    &l_0_issuer_vk,
+                    &params1,
+                    &params2,
+                    &precomp_for_commit_recons,
+                )
+                .unwrap();
+            let recon_precomp_duration = start.elapsed();
+
+            let recon_c_precomp_setup_com =
+                AttributeToken::gen_challenge(&recon_precomp_setup_com, &l_0_issuer_vk);
+            assert_eq!(c_precomp_setup, recon_c_precomp_setup_com);
+
+            let recon_precomp_com = AttributeToken::reconstruct_commitment_with_precomputed_vals(
+                L,
+                &com_precomp,
+                &resp_precomp,
+                &c_precomp,
+                vec![HashSet::<usize>::new(); i],
+                &l_0_issuer_vk,
+                &params1,
+                &params2,
+                &precomp_for_commit_recons,
+            )
+            .unwrap();
+
+            let recon_c_precomp_com =
+                AttributeToken::gen_challenge(&recon_precomp_com, &l_0_issuer_vk);
+            assert_eq!(c_precomp, recon_c_precomp_com);
+
+            println!("For delegation chain of length {}", L);
+            println!("Commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}",
+                     com_duration, resp_duration, recon_duration, com_duration + resp_duration);
+            println!(
+                "Commitment with precomputation on setup paprams takes {:?}",
+                com_precomp_setup_duration
+            );
+            println!(
+                "Commitment with precomputation on setup paprams and signature takes {:?}",
+                com_precomp_duration
+            );
+            println!("Commitment reconstitution with precomputation on setup paprams and root issuer key takes {:?}", recon_precomp_duration);
+        }
     }
 }

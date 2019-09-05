@@ -14,7 +14,7 @@
    - Issuers can delegate by calling `delegate` method that takes the attributes to sign, who to delegate to etc resulting in a credential. 
    - A credential is a called a link and there credentials issued by `EvenLevelIssuer`s are called `CredLinkOdd` and credentials issued by `OddLevelIssuer`s are called `CredLinkEven`.
    - A link stores its associated `level`, `attributes` and `signature`. The last element of `attributes` is the verification key of the delegatee and the signature is on `attributes`.
-   - To verify the correctness of link, call `verify` on it with delegator public key, delegtee public key ans setup params.    
+   - To verify the correctness of link, call `verify` on it with delegator public key, delegatee public key ans setup params.    
    - The chain of credentials is kept in `CredChain` which internally has 2 lists, 1 for odd level links and 1 for even. Even or odd level links can be added by calling `extend_with_even` or `extend_with_odd` on the chain.
    - To verify that all delegations are valid in the chain, call `verify_delegations` on the chain. 
 3. [Attribute tokens](src/attribute_token.rs)  
@@ -25,6 +25,11 @@
      The `commitment` method results in `AttributeTokenComm` object which can be converted to bytes by calling `to_bytes` so that those bytes can be used in challenge computation. Or for testing, `AttributeToken::gen_challenge` can be used that takes `AttributeTokenComm`
    - To generate response, call the `response`.
    - The verifies with then call `AttributeToken::reconstruct_commitment` to reconstruct the commitment that the prover would have created. He can now hash it into the challenge to compare with the prover's challenge.
+   - Commitment computation can be sped up by using precomputation of some of the pairings. Precomputation can be done on the setup parameters which can be used for computing commitments 
+    involving any `CredChain` or it can be done on signatures as well which makes those precomputations relevant to that `CredChain` only. 
+    Thus the commitment can be created using 3 methods, either `AttributeToken::commitment` that does not accept any precomputation, 
+    `AttributeToken::commitment_with_precomputation_on_setup_params` that only accepts precomputation done on setup params (using `PrecompOnSetupParams::new`) and 
+    `AttributeToken::commitment_with_precomputation` that accepts precomputation done on setup params (using `PrecompOnSetupParams::new`) and on `CredChain` using `PrecompOnCredChain::new` 
 
 Refer the tests to for details of the API. 
 
