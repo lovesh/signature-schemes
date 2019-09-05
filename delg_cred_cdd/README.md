@@ -19,7 +19,9 @@
    - To verify that all delegations are valid in the chain, call `verify_delegations` on the chain. 
 3. [Attribute tokens](src/attribute_token.rs)  
    - Call `AttributeToken::new` with the `CredChain` and setup parameters to initialize attribute token generation.
-   - Currently attribute tokens are generated for all levels of the given chain. 
+   - Attribute tokens are generated for all levels of the given chain. To generate attribute token for a subset of the chain, first get a truncated version of the chain by
+   calling `CredChain::get_truncated_chain` and then use that to create the attribute token. eg. if chain length is 10 and attribute token is 
+   needed for the first 5 levels of the chain, get a truncated chain with `CredChain::get_truncated_chain(5)` and then use the result in `AttributeToken::new`     
    - Attribute token generation happens in 2 phases. In the commitment phase all commitments are generated and the response phase accepts the challenge. These are intentionally decoupled so that this can be used in a higher level protocol.
    - To generate the commitment, call `commitment` method with the indices of the revealed attributes at each level. The indices at each level are a set of integers.  
      The `commitment` method results in `AttributeTokenComm` object which can be converted to bytes by calling `to_bytes` so that those bytes can be used in challenge computation. Or for testing, `AttributeToken::gen_challenge` can be used that takes `AttributeTokenComm`
@@ -37,9 +39,8 @@ Refer the tests to for details of the API.
 Tests print the timing of various operations. Run tests in release mode to get the timing information.
 
 ```
-RUST_TEST_THREADS=1 RUST_BACKTRACE=1 cargo test --release -- --nocapture
+RUST_TEST_THREADS=1 cargo test --release -- --nocapture
 ```
 
 ### Pending
 1. Fix TODOs in code for more input validation and optimizations
-2. Allow attribute tokens to be generated for arbitrary levels.

@@ -224,6 +224,22 @@ impl CredChain {
         }
         Ok(true)
     }
+
+    /// Returns a truncated version of the current chain. Does not modify the current chain but clones the links.
+    pub fn get_truncated(&self, size: usize) -> DelgResult<Self> {
+        if size > self.size() {
+            return Err(DelgError::ChainIsShorterThanExpected {actual_size: self.size(), expected_size: size})
+        }
+        let mut new_chain = CredChain::new();
+        for i in 1..=size {
+            if i / 2 != 1 {
+                new_chain.odd_links.push(self.odd_links[i / 2].clone());
+            } else {
+                new_chain.even_links.push(self.even_links[(i / 2) - 1].clone());
+            }
+        }
+        Ok(new_chain)
+    }
 }
 
 impl EvenLevelIssuer {
@@ -302,6 +318,8 @@ mod tests {
     // For benchmarking
     use std::time::{Duration, Instant};
 
+    /// XXX: Need test fixtures
+
     #[test]
     fn test_delegation_level_0_to_level_2() {
         let max_attributes = 5;
@@ -372,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    fn test_delegation_level_chain_verification() {
+    fn test_delegation_chain_verification() {
         let max_attributes = 3;
         let label = "test".as_bytes();
         let params1 = GrothS1::setup(max_attributes, label);
@@ -520,5 +538,228 @@ mod tests {
             chain_4.size(),
             start.elapsed()
         );
+    }
+
+    #[test]
+    fn test_truncated_delegation_chain() {
+        let max_attributes = 3;
+        let label = "test".as_bytes();
+        let params1 = GrothS1::setup(max_attributes, label);
+        let params2 = GrothS2::setup(max_attributes, label);
+
+        let l_0_issuer = EvenLevelIssuer::new(0).unwrap();
+        let l_1_issuer = OddLevelIssuer::new(1).unwrap();
+        let l_2_issuer = EvenLevelIssuer::new(2).unwrap();
+        let l_3_issuer = OddLevelIssuer::new(3).unwrap();
+
+        let (l_0_issuer_sk, l_0_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+        let (l_1_issuer_sk, l_1_issuer_vk) = OddLevelIssuer::keygen(&params2);
+        let (l_2_issuer_sk, l_2_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+        let (l_3_issuer_sk, l_3_issuer_vk) = OddLevelIssuer::keygen(&params2);
+        let (l_4_issuer_sk, l_4_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+
+        let attributes_1: G1Vector = (0..max_attributes - 1)
+            .map(|_| G1::random())
+            .collect::<Vec<G1>>()
+            .into();
+        let cred_link_1 = l_0_issuer
+            .delegate(
+                attributes_1.clone(),
+                l_1_issuer_vk.clone(),
+                &l_0_issuer_sk,
+                &params1,
+            )
+            .unwrap();
+        let mut chain_1 = CredChain::new();
+        chain_1.extend_with_odd(cred_link_1).unwrap();
+
+        assert!(chain_1
+            .verify_delegations(
+                vec![&l_0_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        assert!(chain_1.get_truncated(2).is_err());
+
+        let chain_1_1 = chain_1.get_truncated(1).unwrap();
+        assert!(chain_1_1
+            .verify_delegations(
+                vec![&l_0_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let attributes_2: G2Vector = (0..max_attributes - 1)
+            .map(|_| G2::random())
+            .collect::<Vec<G2>>()
+            .into();
+        let cred_link_2 = l_1_issuer
+            .delegate(
+                attributes_2.clone(),
+                l_2_issuer_vk.clone(),
+                &l_1_issuer_sk,
+                &params2,
+            )
+            .unwrap();
+        let mut chain_2 = chain_1.clone();
+        chain_2.extend_with_even(cred_link_2).unwrap();
+
+        assert!(chain_2
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        assert!(chain_2.get_truncated(3).is_err());
+
+        let chain_2_1 = chain_2.get_truncated(1).unwrap();
+        assert!(chain_2_1
+            .verify_delegations(
+                vec![&l_0_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let chain_2_2 = chain_2.get_truncated(2).unwrap();
+        assert!(chain_2_2
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let attributes_3: G1Vector = (0..max_attributes - 1)
+            .map(|_| G1::random())
+            .collect::<Vec<G1>>()
+            .into();
+        let cred_link_3 = l_2_issuer
+            .delegate(
+                attributes_3.clone(),
+                l_3_issuer_vk.clone(),
+                &l_2_issuer_sk,
+                &params1,
+            )
+            .unwrap();
+        let mut chain_3 = chain_2.clone();
+        chain_3.extend_with_odd(cred_link_3).unwrap();
+
+        assert!(chain_3
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk],
+                vec![&l_1_issuer_vk, &l_3_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        assert!(chain_3.get_truncated(4).is_err());
+
+        let chain_3_1 = chain_3.get_truncated(1).unwrap();
+        assert!(chain_3_1
+            .verify_delegations(
+                vec![&l_0_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let chain_3_2 = chain_3.get_truncated(2).unwrap();
+        assert!(chain_3_2
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let chain_3_3 = chain_3.get_truncated(3).unwrap();
+        assert!(chain_3
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk],
+                vec![&l_1_issuer_vk, &l_3_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let attributes_4: G2Vector = (0..max_attributes - 1)
+            .map(|_| G2::random())
+            .collect::<Vec<G2>>()
+            .into();
+        let cred_link_4 = l_3_issuer
+            .delegate(
+                attributes_4.clone(),
+                l_4_issuer_vk.clone(),
+                &l_3_issuer_sk,
+                &params2,
+            )
+            .unwrap();
+        let mut chain_4 = chain_3.clone();
+        chain_4.extend_with_even(cred_link_4).unwrap();
+
+        assert!(chain_4
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk, &l_4_issuer_vk],
+                vec![&l_1_issuer_vk, &l_3_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        assert!(chain_4.get_truncated(5).is_err());
+
+        let chain_4_1 = chain_4.get_truncated(1).unwrap();
+        assert!(chain_4_1
+            .verify_delegations(
+                vec![&l_0_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let chain_4_2 = chain_4.get_truncated(2).unwrap();
+        assert!(chain_4_2
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk],
+                vec![&l_1_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let chain_4_3 = chain_4.get_truncated(3).unwrap();
+        assert!(chain_4_3
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk],
+                vec![&l_1_issuer_vk, &l_3_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
+
+        let chain_4_4 = chain_4.get_truncated(4).unwrap();
+        assert!(chain_4_4
+            .verify_delegations(
+                vec![&l_0_issuer_vk, &l_2_issuer_vk, &l_4_issuer_vk],
+                vec![&l_1_issuer_vk, &l_3_issuer_vk],
+                &params1,
+                &params2
+            )
+            .unwrap());
     }
 }

@@ -47,6 +47,12 @@ pub enum DelgError {
     )]
     UnequalNoOfBasesExponents { bases: usize, exponents: usize },
 
+    #[fail(
+    display = "Chain size is {} but expected size at least {}",
+    actual_size, expected_size
+    )]
+    ChainIsShorterThanExpected {actual_size: usize, expected_size: usize},
+
     #[fail(display = "Error with message {:?}", msg)]
     GeneralError { msg: String },
 }
