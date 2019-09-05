@@ -226,7 +226,7 @@ mod tests {
                 &sk,
                 &vk,
             )
-                .unwrap();
+            .unwrap();
             total_signing += start.elapsed();
 
             let start = Instant::now();
@@ -235,8 +235,14 @@ mod tests {
             total_verifying += start.elapsed();
         }
 
-        println!("Time to create {} signatures is {:?}", iterations, total_signing);
-        println!("Time to verify {} signatures is {:?}", iterations, total_verifying);
+        println!(
+            "Time to create {} signatures is {:?}",
+            iterations, total_signing
+        );
+        println!(
+            "Time to verify {} signatures is {:?}",
+            iterations, total_verifying
+        );
     }
     // TODO: Add tests for negative cases like more messages than supported by public key, etc
 }

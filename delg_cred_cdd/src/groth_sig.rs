@@ -5,7 +5,6 @@ use amcl_wrapper::group_elem::{GroupElement, GroupElementVector};
 use amcl_wrapper::group_elem_g1::{G1LookupTable, G1Vector, G1};
 use amcl_wrapper::group_elem_g2::{G2Vector, G2};
 
-/*#[macro_export]
 macro_rules! impl_GrothS {
     ( $GrothSetupParams:ident, $GrothSigkey:ident, $GrothVerkey:ident, $GrothSig:ident, $GrothS:ident, $vk_group:ident, $msg_group:ident, $GVector:ident ) => {
         #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -16,79 +15,80 @@ macro_rules! impl_GrothS {
         }
 
         #[derive(Clone, Debug, Serialize, Deserialize)]
-        pub struct $GrothSigkey(FieldElement);
+        pub struct $GrothSigkey(pub FieldElement);
 
         #[derive(Clone, Debug, Serialize, Deserialize)]
-        pub struct $GrothVerkey($vk_group);
+        pub struct $GrothVerkey(pub $vk_group);
 
         #[derive(Clone, Debug, Serialize, Deserialize)]
         pub struct $GrothSig {
             pub R: $vk_group,
             pub S: $msg_group,
-            pub T: $GVector
+            pub T: $GVector,
         }
 
         pub struct $GrothS {}
+    };
+}
 
-        impl $GrothS {
-            pub fn setup(count_messages: usize, label: &[u8]) -> $GrothSetupParams {
-                let g1 = G1::from_msg_hash(&[label, " : g1".as_bytes()].concat());
-                let g2 = G2::from_msg_hash(&[label, " : g2".as_bytes()].concat());
-                let mut y = $GVector::with_capacity(count_messages);
-                for i in 0..count_messages {
-                    // construct a group element from hashing label||y||i for each i
-                    let yi = $msg_group::from_msg_hash(&[label, " : y".as_bytes(), i.to_string().as_bytes()].concat());
-                    y.push(yi);
-                }
-                $GrothSetupParams { g1, g2, y}
+macro_rules! impl_GrothS_setup {
+    ( $GrothSetupParams:ident, $msg_group:ident, $GVector:ident ) => {
+        pub fn setup(count_messages: usize, label: &[u8]) -> $GrothSetupParams {
+            // NUMS for g1 and g2
+            let g1 = G1::from_msg_hash(&[label, " : g1".as_bytes()].concat());
+            let g2 = G2::from_msg_hash(&[label, " : g2".as_bytes()].concat());
+            let mut y = $GVector::with_capacity(count_messages);
+            for i in 0..count_messages {
+                // // NUMS for y. construct a group element from hashing label||y||i for each i
+                let yi = $msg_group::from_msg_hash(
+                    &[label, " : y".as_bytes(), i.to_string().as_bytes()].concat(),
+                );
+                y.push(yi);
             }
+            $GrothSetupParams { g1, g2, y }
+        }
+    };
+}
 
-            pub fn keygen(setup_params: &Groth2SetupParams) -> (Groth2Sigkey, Groth2Verkey) {
-                // TODO: Take PRNG as argument
-                let sk = FieldElement::random();
-                let vk = &setup_params.g1 * &sk;
-                (Groth2Sigkey(sk), Groth2Verkey(vk))
+macro_rules! impl_GrothSig_randomize {
+    (  ) => {
+        pub fn randomize(&self, r_prime: &FieldElement) -> Self {
+            let r_prime_inv = r_prime.inverse();
+            let R = &self.R * r_prime;
+            let S = &self.S * &r_prime_inv;
+            Self {
+                R,
+                S,
+                T: self.T.scaled_by(&r_prime_inv),
             }
         }
     }
-}*/
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth1SetupParams {
-    pub g1: G1,
-    pub g2: G2,
-    pub y: G1Vector,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth1Sigkey(pub FieldElement);
+impl_GrothS!(
+    Groth1SetupParams,
+    Groth1Sigkey,
+    Groth1Verkey,
+    Groth1Sig,
+    GrothS1,
+    G2,
+    G1,
+    G1Vector
+);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth1Verkey(pub G2);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth1Sig {
-    pub R: G2,
-    pub S: G1,
-    pub T: G1Vector,
-}
-
-pub struct GrothS1 {}
+impl_GrothS!(
+    Groth2SetupParams,
+    Groth2Sigkey,
+    Groth2Verkey,
+    Groth2Sig,
+    GrothS2,
+    G1,
+    G2,
+    G2Vector
+);
 
 impl GrothS1 {
-    pub fn setup(count_messages: usize, label: &[u8]) -> Groth1SetupParams {
-        // NUMS for g1 and g2
-        let g1 = G1::from_msg_hash(&[label, " : g1".as_bytes()].concat());
-        let g2 = G2::from_msg_hash(&[label, " : g2".as_bytes()].concat());
-        let mut y = G1Vector::with_capacity(count_messages);
-        for i in 0..count_messages {
-            // construct a group element from hashing label||y||i for each i
-            let yi =
-                G1::from_msg_hash(&[label, " : y".as_bytes(), i.to_string().as_bytes()].concat());
-            y.push(yi);
-        }
-        Groth1SetupParams { g1, g2, y }
-    }
+    impl_GrothS_setup!(Groth1SetupParams, G1, G1Vector);
 
     pub fn keygen(setup_params: &Groth1SetupParams) -> (Groth1Sigkey, Groth1Verkey) {
         // TODO: Take PRNG as argument
@@ -123,16 +123,7 @@ impl Groth1Sig {
         Ok(Self { R, S, T })
     }
 
-    pub fn randomize(&self, r_prime: &FieldElement) -> Self {
-        let r_prime_inv = r_prime.inverse();
-        let R = &self.R * r_prime;
-        let S = &self.S * &r_prime_inv;
-        Self {
-            R,
-            S,
-            T: self.T.scaled_by(&r_prime_inv),
-        }
-    }
+    impl_GrothSig_randomize!();
 
     pub fn verify(
         &self,
@@ -228,42 +219,8 @@ impl Groth1Sig {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth2SetupParams {
-    pub g1: G1,
-    pub g2: G2,
-    pub y: G2Vector,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth2Sigkey(pub FieldElement);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth2Verkey(pub G1);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Groth2Sig {
-    pub R: G1,
-    pub S: G2,
-    pub T: G2Vector,
-}
-
-pub struct GrothS2 {}
-
 impl GrothS2 {
-    pub fn setup(count_messages: usize, label: &[u8]) -> Groth2SetupParams {
-        // NUMS for g1 and g2
-        let g1 = G1::from_msg_hash(&[label, " : g1".as_bytes()].concat());
-        let g2 = G2::from_msg_hash(&[label, " : g2".as_bytes()].concat());
-        let mut y = G2Vector::with_capacity(count_messages);
-        for i in 0..count_messages {
-            // construct a group element from hashing label||y||i for each i
-            let yi =
-                G2::from_msg_hash(&[label, " : y".as_bytes(), i.to_string().as_bytes()].concat());
-            y.push(yi);
-        }
-        Groth2SetupParams { g1, g2, y }
-    }
+    impl_GrothS_setup!(Groth2SetupParams, G2, G2Vector);
 
     pub fn keygen(setup_params: &Groth2SetupParams) -> (Groth2Sigkey, Groth2Verkey) {
         // TODO: Take PRNG as argument
@@ -298,16 +255,7 @@ impl Groth2Sig {
         Ok(Self { R, S, T })
     }
 
-    pub fn randomize(&self, r_prime: &FieldElement) -> Self {
-        let r_prime_inv = r_prime.inverse();
-        let R = &self.R * r_prime;
-        let S = &self.S * &r_prime_inv;
-        Self {
-            R,
-            S,
-            T: self.T.scaled_by(&r_prime_inv),
-        }
-    }
+    impl_GrothSig_randomize!();
 
     pub fn verify(
         &self,

@@ -278,7 +278,6 @@ mod tests {
         revealed_msg_indices.insert(4);
         revealed_msg_indices.insert(9);
 
-
         let pok =
             PoKOfSignature::init(&sig, &vk, msgs.as_slice(), revealed_msg_indices.clone()).unwrap();
 
@@ -326,7 +325,13 @@ mod tests {
             total_verifying += start.elapsed();
         }
 
-        println!("Time to create {} proofs is {:?}", iterations, total_generating);
-        println!("Time to verify {} proofs is {:?}", iterations, total_verifying);
+        println!(
+            "Time to create {} proofs is {:?}",
+            iterations, total_generating
+        );
+        println!(
+            "Time to verify {} proofs is {:?}",
+            iterations, total_verifying
+        );
     }
 }

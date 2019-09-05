@@ -67,7 +67,7 @@ fn test_scenario_1() {
     revealed_msg_indices.insert(4);
     revealed_msg_indices.insert(6);
     revealed_msg_indices.insert(9);
-    
+
     let pok = PoKOfSignature::init(
         &sig_unblinded,
         &vk,
