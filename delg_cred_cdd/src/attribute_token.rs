@@ -163,7 +163,24 @@ impl PrecompForCommitmentReconstitution {
         }
     }
 }
+
 // TODO: Convert asserts in non-test code to errors
+
+macro_rules! check_blindings_count {
+    ( $self:ident, $i: ident, $link:ident, $unrevealed_attr_count:ident ) => {{
+
+        if $self.blindings_t[$i - 1].len() != $link.signature.T.len() {
+            Err(DelgError::GeneralError { msg: format!("t blindings count unequal to t count") })
+        } else if $link.attribute_count() != $link.signature.T.len() {
+            Err(DelgError::GeneralError { msg: format!("attribute count unequal to t count") })
+        } else if $self.blindings_a[$i - 1].len() != $unrevealed_attr_count {
+            Err(DelgError::GeneralError { msg: format!("attribute blidnding count unequal to unrevealed attribute count") })
+        } else {
+            Ok(())
+        }
+
+    }};
+}
 
 impl<'a> AttributeToken<'a> {
     pub fn new(
@@ -208,11 +225,18 @@ impl<'a> AttributeToken<'a> {
         even_level_vks: Vec<&EvenLevelVerkey>,
         odd_level_vks: Vec<&OddLevelVerkey>,
     ) -> DelgResult<AttributeTokenResp> {
-        assert_eq!(at.comms_t.len(), self.L);
-        assert_eq!(
-            at.odd_level_revealed_attributes.len() + at.even_level_revealed_attributes.len(),
-            self.L
-        );
+        if at.comms_t.len() != self.L {
+            return Err(DelgError::IncorrectNumberOfTCommitments {
+                expected: self.L,
+                given: at.comms_t.len(),
+            });
+        }
+        if (at.odd_level_revealed_attributes.len() + at.even_level_revealed_attributes.len()) != self.L {
+            return Err(DelgError::IncorrectNumberOfRevealedAttributeSets {
+                expected: self.L,
+                given: at.odd_level_revealed_attributes.len() + at.even_level_revealed_attributes.len(),
+            });
+        }
 
         let mut resp_csk = FieldElement::zero();
         let mut odd_level_resp_vk = G1Vector::new(0);
@@ -248,9 +272,12 @@ impl<'a> AttributeToken<'a> {
                 // Total messages - revealed attributes - last message (for verkey)
                 let unrevealed_attr_count =
                     link.attribute_count() - at.odd_level_revealed_attributes[i / 2].len() - 1;
-                assert_eq!(self.blindings_t[i - 1].len(), link.signature.T.len());
+
+                /*assert_eq!(self.blindings_t[i - 1].len(), link.signature.T.len());
                 assert_eq!(link.attribute_count(), link.signature.T.len());
-                assert_eq!(self.blindings_a[i - 1].len(), unrevealed_attr_count);
+                assert_eq!(self.blindings_a[i - 1].len(), unrevealed_attr_count);*/
+                check_blindings_count!(self, i, link, unrevealed_attr_count)?;
+
                 let mut resp_t = G1Vector::with_capacity(link.attribute_count());
                 let mut resp_a = G1Vector::with_capacity(unrevealed_attr_count);
                 let mut k = 0;
@@ -302,9 +329,12 @@ impl<'a> AttributeToken<'a> {
                 let unrevealed_attr_count = link.attribute_count()
                     - at.even_level_revealed_attributes[(i / 2) - 1].len()
                     - 1;
-                assert_eq!(self.blindings_t[i - 1].len(), link.signature.T.len());
+
+                /*assert_eq!(self.blindings_t[i - 1].len(), link.signature.T.len());
                 assert_eq!(link.attribute_count(), link.signature.T.len());
-                assert_eq!(self.blindings_a[i - 1].len(), unrevealed_attr_count);
+                assert_eq!(self.blindings_a[i - 1].len(), unrevealed_attr_count);*/
+                check_blindings_count!(self, i, link, unrevealed_attr_count)?;
+
                 let mut resp_t = G2Vector::with_capacity(link.attribute_count());
                 let mut resp_a = G2Vector::with_capacity(unrevealed_attr_count);
                 let mut k = 0;
@@ -367,9 +397,19 @@ impl<'a> AttributeToken<'a> {
         setup_params_1: &Groth1SetupParams,
         setup_params_2: &Groth2SetupParams,
     ) -> DelgResult<AttributeTokenComm> {
-        assert_eq!(comm.comms_s.len(), L);
-        assert_eq!(comm.comms_t.len(), L);
-        // TODO: Check that y in setup params satisfies attribute count
+        if comm.comms_t.len() != L {
+            return Err(DelgError::IncorrectNumberOfTCommitments {
+                expected: L,
+                given: comm.comms_t.len(),
+            });
+        }
+
+        if comm.comms_s.len() != L {
+            return Err(DelgError::IncorrectNumberOfSCommitments {
+                expected: L,
+                given: comm.comms_s.len(),
+            });
+        }
 
         let mut comms_s = Vec::<GT>::with_capacity(L);
         let mut comms_t = Vec::<Vec<GT>>::with_capacity(L);
@@ -381,7 +421,7 @@ impl<'a> AttributeToken<'a> {
         let groth2_neg_g1 = -&setup_params_2.g1;
         let groth2_neg_g2 = -&setup_params_2.g2;
 
-        let challenge_neg = challenge.negation();
+        let challenge_neg = -challenge;
         // g1^-c
         let groth2_g1_c = &setup_params_2.g1 * &challenge_neg;
         // g2^-c
@@ -400,6 +440,22 @@ impl<'a> AttributeToken<'a> {
         for i in 1..=L {
             if i % 2 == 1 {
                 // Odd level
+                let attr_count = comm.comms_t[i - 1].len();
+                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
+                if attr_count > setup_params_1.y.len() {
+                    return Err(DelgError::MoreAttributesThanExpected {
+                        expected: setup_params_1.y.len()+1,
+                        given: attr_count,
+                    });
+                }
+                // Skipping 1 for verkey
+                if (unrevealed_attr_count - 1) > resp.odd_level_resp_a[i / 2].len() {
+                    return Err(DelgError::MoreUnrevealedAttributesThanExpected {
+                        expected: resp.odd_level_resp_a[i / 2].len(),
+                        given: unrevealed_attr_count,
+                    });
+                }
+
                 // e(y[j], ipk)^-c can be changed to e(y[j], ipk^-c) and ipk^-c can be computed once for all odd levels.
                 // Then e(y[j], ipk)^-c can then be used in a multi-pairing.
                 let com_i_s = if i == 1 {
@@ -424,9 +480,7 @@ impl<'a> AttributeToken<'a> {
                 };
                 comms_s.push(com_i_s);
 
-                let attr_count = comm.comms_t[i - 1].len();
                 let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
-                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
                 let mut k = 0;
 
                 // Last attribute is the verkey so skip for now
@@ -449,7 +503,7 @@ impl<'a> AttributeToken<'a> {
                                 ),
                                 (&resp.odd_level_resp_a[i / 2][k], &groth1_neg_g2),
                                 (
-                                    &(setup_params_1.y[j].negation()),
+                                    &(-&setup_params_1.y[j]),
                                     &resp.even_level_resp_vk[(i / 2) - 1],
                                 ),
                             ]));
@@ -472,7 +526,7 @@ impl<'a> AttributeToken<'a> {
                                     &comm.odd_level_blinded_r[i / 2],
                                 ),
                                 (
-                                    &(setup_params_1.y[j].negation()),
+                                    &(-&setup_params_1.y[j]),
                                     &resp.even_level_resp_vk[(i / 2) - 1],
                                 ),
                                 (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c),
@@ -511,7 +565,7 @@ impl<'a> AttributeToken<'a> {
                                 &comm.odd_level_blinded_r[i / 2],
                             ),
                             (
-                                &(setup_params_1.y[attr_count - 1].negation()),
+                                &(-&setup_params_1.y[attr_count - 1]),
                                 &resp.even_level_resp_vk[(i / 2) - 1],
                             ),
                             (&resp.odd_level_resp_vk[i / 2], &groth1_neg_g2),
@@ -520,7 +574,7 @@ impl<'a> AttributeToken<'a> {
                         let e_1 = GT::ate_2_pairing(
                             &resp.odd_level_resp_t[i / 2][attr_count - 1],
                             &comm.odd_level_blinded_r[i / 2],
-                            &(setup_params_1.y[attr_count - 1].negation()),
+                            &(-&setup_params_1.y[attr_count - 1]),
                             &resp.even_level_resp_vk[(i / 2) - 1],
                         );
                         let e_2 = GT::ate_pairing(&setup_params_1.g1, &groth1_neg_g2);
@@ -532,6 +586,22 @@ impl<'a> AttributeToken<'a> {
                 comms_t.push(com_t);
             } else {
                 // Even level
+                let attr_count = comm.comms_t[i - 1].len();
+                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
+                if attr_count > setup_params_2.y.len() {
+                    return Err(DelgError::MoreAttributesThanExpected {
+                        expected: setup_params_2.y.len()+1,
+                        given: attr_count,
+                    });
+                }
+                // Skipping 1 for verkey
+                if (unrevealed_attr_count - 1) > resp.even_level_resp_a[(i / 2) - 1].len() {
+                    return Err(DelgError::MoreUnrevealedAttributesThanExpected {
+                        expected: resp.even_level_resp_a[(i / 2) - 1].len(),
+                        given: unrevealed_attr_count,
+                    });
+                }
+
                 let e_1 = GT::ate_2_pairing(
                     &comm.even_level_blinded_r[(i / 2) - 1],
                     &resp.even_level_resp_s[(i / 2) - 1],
@@ -541,9 +611,8 @@ impl<'a> AttributeToken<'a> {
                 let com_i_s = GT::mul(&e_1, &g1_y0_c);
                 comms_s.push(com_i_s);
 
-                let attr_count = comm.comms_t[i - 1].len();
+
                 let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
-                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
                 let mut k = 0;
 
                 // Last attribute is the verkey so skip for now
@@ -553,7 +622,7 @@ impl<'a> AttributeToken<'a> {
                             // XXX: -y[j] can be pre-computed
                             (
                                 &resp.odd_level_resp_vk[(i / 2) - 1],
-                                &(setup_params_2.y[j].negation()),
+                                &(-&setup_params_2.y[j]),
                             ),
                             (
                                 &comm.even_level_blinded_r[(i / 2) - 1],
@@ -568,7 +637,7 @@ impl<'a> AttributeToken<'a> {
                             GT::ate_multi_pairing(vec![
                                 (
                                     &resp.odd_level_resp_vk[(i / 2) - 1],
-                                    &(setup_params_2.y[j].negation()),
+                                    &(-&setup_params_2.y[j]),
                                 ),
                                 (
                                     &comm.even_level_blinded_r[(i / 2) - 1],
@@ -592,7 +661,7 @@ impl<'a> AttributeToken<'a> {
                         ),
                         (
                             &resp.odd_level_resp_vk[(i / 2) - 1],
-                            &(setup_params_2.y[attr_count - 1].negation()),
+                            &(-&setup_params_2.y[attr_count - 1]),
                         ),
                         (&groth2_neg_g1, &resp.even_level_resp_vk[(i / 2) - 1]),
                     ])
@@ -601,7 +670,7 @@ impl<'a> AttributeToken<'a> {
                         &comm.even_level_blinded_r[(i / 2) - 1],
                         &resp.even_level_resp_t[(i / 2) - 1][attr_count - 1],
                         &resp.odd_level_resp_vk[(i / 2) - 1],
-                        &(setup_params_2.y[attr_count - 1].negation()),
+                        &(-&setup_params_2.y[attr_count - 1]),
                     );
                     let e_2 = GT::ate_pairing(&groth2_neg_g1, &setup_params_2.g2);
                     let e_3 = GT::pow(&e_2, &resp.resp_csk);
@@ -634,7 +703,12 @@ impl<'a> AttributeToken<'a> {
         precomp_setup: &PrecompOnSetupParams,
         precomp_chain: &PrecompOnCredChain,
     ) -> DelgResult<AttributeTokenComm> {
-        assert_eq!(revealed.len(), self.L);
+        if revealed.len() != self.L {
+            return Err(DelgError::IncorrectNumberOfRevealedAttributeSets {
+                expected: self.L,
+                given: revealed.len(),
+            });
+        }
 
         // In practice, g1 and g2 in both Groth1 and Groth2 can be same
         // The following can be precomputed if performance is critical
@@ -849,9 +923,19 @@ impl<'a> AttributeToken<'a> {
         setup_params_2: &Groth2SetupParams,
         precomputed: &PrecompForCommitmentReconstitution,
     ) -> DelgResult<AttributeTokenComm> {
-        assert_eq!(comm.comms_s.len(), L);
-        assert_eq!(comm.comms_t.len(), L);
-        // TODO: Check that y in setup params satisfies attribute count
+        if comm.comms_t.len() != L {
+            return Err(DelgError::IncorrectNumberOfTCommitments {
+                expected: L,
+                given: comm.comms_t.len(),
+            });
+        }
+
+        if comm.comms_s.len() != L {
+            return Err(DelgError::IncorrectNumberOfSCommitments {
+                expected: L,
+                given: comm.comms_s.len(),
+            });
+        }
 
         let mut comms_s = Vec::<GT>::with_capacity(L);
         let mut comms_t = Vec::<Vec<GT>>::with_capacity(L);
@@ -863,7 +947,7 @@ impl<'a> AttributeToken<'a> {
         let groth2_neg_g1 = -&setup_params_2.g1;
         let groth2_neg_g2 = -&setup_params_2.g2;
 
-        let challenge_neg = challenge.negation();
+        let challenge_neg = -challenge;
         // g1^-c
         let groth2_g1_c = &setup_params_2.g1 * &challenge_neg;
         // g2^-c
@@ -878,6 +962,22 @@ impl<'a> AttributeToken<'a> {
         for i in 1..=L {
             if i % 2 == 1 {
                 // Odd level
+                let attr_count = comm.comms_t[i - 1].len();
+                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
+                if attr_count > setup_params_1.y.len() {
+                    return Err(DelgError::MoreAttributesThanExpected {
+                        expected: setup_params_1.y.len()+1,
+                        given: attr_count,
+                    });
+                }
+                // Skipping 1 for verkey
+                if (unrevealed_attr_count - 1) > resp.odd_level_resp_a[i / 2].len() {
+                    return Err(DelgError::MoreUnrevealedAttributesThanExpected {
+                        expected: resp.odd_level_resp_a[i / 2].len(),
+                        given: unrevealed_attr_count,
+                    });
+                }
+
                 // Use precomputed e(y[j], ipk) for all j
                 let com_i_s = if i == 1 {
                     // e(resp_s_i, r'_i)
@@ -903,9 +1003,7 @@ impl<'a> AttributeToken<'a> {
                 };
                 comms_s.push(com_i_s);
 
-                let attr_count = comm.comms_t[i - 1].len();
                 let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
-                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
                 let mut k = 0;
 
                 // Last attribute is the verkey so skip for now
@@ -928,7 +1026,7 @@ impl<'a> AttributeToken<'a> {
                                 ),
                                 (&resp.odd_level_resp_a[i / 2][k], &groth1_neg_g2),
                                 (
-                                    &(setup_params_1.y[j].negation()),
+                                    &(-&setup_params_1.y[j]),
                                     &resp.even_level_resp_vk[(i / 2) - 1],
                                 ),
                             ]));
@@ -951,7 +1049,7 @@ impl<'a> AttributeToken<'a> {
                                     &comm.odd_level_blinded_r[i / 2],
                                 ),
                                 (
-                                    &(setup_params_1.y[j].negation()),
+                                    &(-&setup_params_1.y[j]),
                                     &resp.even_level_resp_vk[(i / 2) - 1],
                                 ),
                                 (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c),
@@ -991,7 +1089,7 @@ impl<'a> AttributeToken<'a> {
                                 &comm.odd_level_blinded_r[i / 2],
                             ),
                             (
-                                &(setup_params_1.y[attr_count - 1].negation()),
+                                &(-&setup_params_1.y[attr_count - 1]),
                                 &resp.even_level_resp_vk[(i / 2) - 1],
                             ),
                             (&resp.odd_level_resp_vk[i / 2], &groth1_neg_g2),
@@ -1000,7 +1098,7 @@ impl<'a> AttributeToken<'a> {
                         let e_1 = GT::ate_2_pairing(
                             &resp.odd_level_resp_t[i / 2][attr_count - 1],
                             &comm.odd_level_blinded_r[i / 2],
-                            &(setup_params_1.y[attr_count - 1].negation()),
+                            &(-&setup_params_1.y[attr_count - 1]),
                             &resp.even_level_resp_vk[(i / 2) - 1],
                         );
                         let e_3 = GT::pow(&precomputed.pairing_inv_groth1_g1_g2, &resp.resp_csk);
@@ -1011,6 +1109,22 @@ impl<'a> AttributeToken<'a> {
                 comms_t.push(com_t);
             } else {
                 // Even level
+                let attr_count = comm.comms_t[i - 1].len();
+                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
+                if attr_count > setup_params_2.y.len() {
+                    return Err(DelgError::MoreAttributesThanExpected {
+                        expected: setup_params_2.y.len()+1,
+                        given: attr_count,
+                    });
+                }
+                // Skipping 1 for verkey
+                if (unrevealed_attr_count - 1) > resp.even_level_resp_a[(i / 2) - 1].len() {
+                    return Err(DelgError::MoreUnrevealedAttributesThanExpected {
+                        expected: resp.even_level_resp_a[(i / 2) - 1].len(),
+                        given: unrevealed_attr_count,
+                    });
+                }
+
                 let e_1 = GT::ate_2_pairing(
                     &comm.even_level_blinded_r[(i / 2) - 1],
                     &resp.even_level_resp_s[(i / 2) - 1],
@@ -1020,9 +1134,7 @@ impl<'a> AttributeToken<'a> {
                 let com_i_s = GT::mul(&e_1, &g1_y0_c);
                 comms_s.push(com_i_s);
 
-                let attr_count = comm.comms_t[i - 1].len();
                 let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
-                let unrevealed_attr_count = attr_count - revealed[i - 1].len();
                 let mut k = 0;
 
                 // Last attribute is the verkey so skip for now
@@ -1032,7 +1144,7 @@ impl<'a> AttributeToken<'a> {
                             // XXX: -y[j] can be pre-computed
                             (
                                 &resp.odd_level_resp_vk[(i / 2) - 1],
-                                &(setup_params_2.y[j].negation()),
+                                &(-&setup_params_2.y[j]),
                             ),
                             (
                                 &comm.even_level_blinded_r[(i / 2) - 1],
@@ -1047,7 +1159,7 @@ impl<'a> AttributeToken<'a> {
                             GT::ate_multi_pairing(vec![
                                 (
                                     &resp.odd_level_resp_vk[(i / 2) - 1],
-                                    &(setup_params_2.y[j].negation()),
+                                    &(-&setup_params_2.y[j]),
                                 ),
                                 (
                                     &comm.even_level_blinded_r[(i / 2) - 1],
@@ -1071,7 +1183,7 @@ impl<'a> AttributeToken<'a> {
                         ),
                         (
                             &resp.odd_level_resp_vk[(i / 2) - 1],
-                            &(setup_params_2.y[attr_count - 1].negation()),
+                            &(-&setup_params_2.y[attr_count - 1]),
                         ),
                         (&groth2_neg_g1, &resp.even_level_resp_vk[(i / 2) - 1]),
                     ])
@@ -1080,7 +1192,7 @@ impl<'a> AttributeToken<'a> {
                         &comm.even_level_blinded_r[(i / 2) - 1],
                         &resp.even_level_resp_t[(i / 2) - 1][attr_count - 1],
                         &resp.odd_level_resp_vk[(i / 2) - 1],
-                        &(setup_params_2.y[attr_count - 1].negation()),
+                        &(-&setup_params_2.y[attr_count - 1]),
                     );
                     let e_3 = GT::pow(&precomputed.pairing_inv_groth2_g1_g2, &resp.resp_csk);
                     GT::mul(&e_1, &e_3)

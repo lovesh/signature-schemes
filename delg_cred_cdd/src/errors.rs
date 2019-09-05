@@ -53,6 +53,30 @@ pub enum DelgError {
     )]
     ChainIsShorterThanExpected {actual_size: usize, expected_size: usize},
 
+    #[fail(
+    display = "Expected {} `s` commitments but found {}",
+    expected, given
+    )]
+    IncorrectNumberOfSCommitments {expected: usize, given: usize},
+
+    #[fail(
+    display = "Expected {} `t` commitments but found {}",
+    expected, given
+    )]
+    IncorrectNumberOfTCommitments {expected: usize, given: usize},
+
+    #[fail(
+    display = "Expected {} sets of revealed attributes but found {}",
+    expected, given
+    )]
+    IncorrectNumberOfRevealedAttributeSets {expected: usize, given: usize},
+
+    #[fail(
+    display = "Number of unrevealed attributes should be less than {} but given {}",
+    expected, given
+    )]
+    MoreUnrevealedAttributesThanExpected { expected: usize, given: usize },
+
     #[fail(display = "Error with message {:?}", msg)]
     GeneralError { msg: String },
 }

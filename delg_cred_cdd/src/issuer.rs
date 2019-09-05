@@ -232,7 +232,7 @@ impl CredChain {
         }
         let mut new_chain = CredChain::new();
         for i in 1..=size {
-            if i / 2 != 1 {
+            if (i % 2) == 1 {
                 new_chain.odd_links.push(self.odd_links[i / 2].clone());
             } else {
                 new_chain.even_links.push(self.even_links[(i / 2) - 1].clone());
@@ -585,6 +585,7 @@ mod tests {
         assert!(chain_1.get_truncated(2).is_err());
 
         let chain_1_1 = chain_1.get_truncated(1).unwrap();
+        assert_eq!(chain_1_1.size(), 1);
         assert!(chain_1_1
             .verify_delegations(
                 vec![&l_0_issuer_vk],
@@ -621,6 +622,7 @@ mod tests {
         assert!(chain_2.get_truncated(3).is_err());
 
         let chain_2_1 = chain_2.get_truncated(1).unwrap();
+        assert_eq!(chain_2_1.size(), 1);
         assert!(chain_2_1
             .verify_delegations(
                 vec![&l_0_issuer_vk],
@@ -631,6 +633,7 @@ mod tests {
             .unwrap());
 
         let chain_2_2 = chain_2.get_truncated(2).unwrap();
+        assert_eq!(chain_2_2.size(), 2);
         assert!(chain_2_2
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk],
@@ -667,6 +670,7 @@ mod tests {
         assert!(chain_3.get_truncated(4).is_err());
 
         let chain_3_1 = chain_3.get_truncated(1).unwrap();
+        assert_eq!(chain_3_1.size(), 1);
         assert!(chain_3_1
             .verify_delegations(
                 vec![&l_0_issuer_vk],
@@ -677,6 +681,7 @@ mod tests {
             .unwrap());
 
         let chain_3_2 = chain_3.get_truncated(2).unwrap();
+        assert_eq!(chain_3_2.size(), 2);
         assert!(chain_3_2
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk],
@@ -687,6 +692,7 @@ mod tests {
             .unwrap());
 
         let chain_3_3 = chain_3.get_truncated(3).unwrap();
+        assert_eq!(chain_3_3.size(), 3);
         assert!(chain_3
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk],
@@ -723,6 +729,7 @@ mod tests {
         assert!(chain_4.get_truncated(5).is_err());
 
         let chain_4_1 = chain_4.get_truncated(1).unwrap();
+        assert_eq!(chain_4_1.size(), 1);
         assert!(chain_4_1
             .verify_delegations(
                 vec![&l_0_issuer_vk],
@@ -733,6 +740,7 @@ mod tests {
             .unwrap());
 
         let chain_4_2 = chain_4.get_truncated(2).unwrap();
+        assert_eq!(chain_4_2.size(), 2);
         assert!(chain_4_2
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk],
@@ -743,6 +751,7 @@ mod tests {
             .unwrap());
 
         let chain_4_3 = chain_4.get_truncated(3).unwrap();
+        assert_eq!(chain_4_3.size(), 3);
         assert!(chain_4_3
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk],
@@ -753,6 +762,7 @@ mod tests {
             .unwrap());
 
         let chain_4_4 = chain_4.get_truncated(4).unwrap();
+        assert_eq!(chain_4_4.size(), 4);
         assert!(chain_4_4
             .verify_delegations(
                 vec![&l_0_issuer_vk, &l_2_issuer_vk, &l_4_issuer_vk],
