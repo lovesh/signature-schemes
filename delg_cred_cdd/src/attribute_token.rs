@@ -264,9 +264,6 @@ impl<'a> AttributeToken<'a> {
                 let unrevealed_attr_count =
                     link.attribute_count() - at.odd_level_revealed_attributes[i / 2].len() - 1;
 
-                /*assert_eq!(self.blindings_t[i - 1].len(), link.signature.T.len());
-                assert_eq!(link.attribute_count(), link.signature.T.len());
-                assert_eq!(self.blindings_a[i - 1].len(), unrevealed_attr_count);*/
                 check_blindings_count!(self, i, link, unrevealed_attr_count)?;
 
                 let mut resp_t = G1Vector::with_capacity(link.attribute_count());
@@ -321,9 +318,6 @@ impl<'a> AttributeToken<'a> {
                     - at.even_level_revealed_attributes[(i / 2) - 1].len()
                     - 1;
 
-                /*assert_eq!(self.blindings_t[i - 1].len(), link.signature.T.len());
-                assert_eq!(link.attribute_count(), link.signature.T.len());
-                assert_eq!(self.blindings_a[i - 1].len(), unrevealed_attr_count);*/
                 check_blindings_count!(self, i, link, unrevealed_attr_count)?;
 
                 let mut resp_t = G2Vector::with_capacity(link.attribute_count());
@@ -732,6 +726,13 @@ impl<'a> AttributeToken<'a> {
                     GT::mul(&e_1, &e_2)
                 };
 
+                if revealed[i - 1].len() > self.setup_params_1.y.len() {
+                    return Err(DelgError::MoreAttributesThanExpected {
+                        expected: self.setup_params_1.y.len(),
+                        given: revealed[i - 1].len(),
+                    });
+                }
+
                 let unrevealed_attr_count = link.attribute_count() - revealed[i - 1].len();
                 let mut r_t = FieldElementVector::with_capacity(link.attribute_count());
                 let mut r_a = FieldElementVector::with_capacity(unrevealed_attr_count);
@@ -809,6 +810,13 @@ impl<'a> AttributeToken<'a> {
                     &self.blindings_vk[i - 2],
                 );
                 let com_i_s = GT::mul(&e_1, &e_2);
+
+                if revealed[i - 1].len() > self.setup_params_2.y.len() {
+                    return Err(DelgError::MoreAttributesThanExpected {
+                        expected: self.setup_params_2.y.len(),
+                        given: revealed[i - 1].len(),
+                    });
+                }
 
                 let unrevealed_attr_count = link.attribute_count() - revealed[i - 1].len();
                 let mut r_t = FieldElementVector::with_capacity(link.attribute_count());

@@ -7,7 +7,6 @@ use amcl_wrapper::group_elem::{GroupElement, GroupElementVector};
 use amcl_wrapper::group_elem_g1::{G1LookupTable, G1Vector, G1};
 use amcl_wrapper::group_elem_g2::{G2Vector, G2};
 
-// TODO: Think about making structs rather than type alias. The struct will also hold the level
 pub type EvenLevelSigkey = Groth1Sigkey;
 pub type EvenLevelVerkey = Groth1Verkey;
 pub type OddLevelSigkey = Groth2Sigkey;
@@ -107,7 +106,6 @@ impl CredLinkEven {
 }
 
 impl CredChain {
-    // TODO: Add an iterator that traverses the links in order of level by traversing both odd_links and even_links.
     pub fn new() -> Self {
         Self {
             odd_links: vec![],

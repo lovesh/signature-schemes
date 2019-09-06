@@ -91,7 +91,6 @@ impl GrothS1 {
     impl_GrothS_setup!(Groth1SetupParams, G1, G1Vector);
 
     pub fn keygen(setup_params: &Groth1SetupParams) -> (Groth1Sigkey, Groth1Verkey) {
-        // TODO: Take PRNG as argument
         let sk = FieldElement::random();
         let vk = &setup_params.g2 * &sk;
         (Groth1Sigkey(sk), Groth1Verkey(vk))
@@ -110,7 +109,6 @@ impl Groth1Sig {
                 given: messages.len(),
             });
         }
-        // TODO: Take PRNG as argument
         let r = FieldElement::random();
         let r_inv = r.inverse();
         let R = &setup_params.g2 * &r;
@@ -223,7 +221,6 @@ impl GrothS2 {
     impl_GrothS_setup!(Groth2SetupParams, G2, G2Vector);
 
     pub fn keygen(setup_params: &Groth2SetupParams) -> (Groth2Sigkey, Groth2Verkey) {
-        // TODO: Take PRNG as argument
         let sk = FieldElement::random();
         let vk = &setup_params.g1 * &sk;
         (Groth2Sigkey(sk), Groth2Verkey(vk))
@@ -242,7 +239,6 @@ impl Groth2Sig {
                 given: messages.len(),
             });
         }
-        // TODO: Take PRNG as argument
         let r = FieldElement::random();
         let r_inv = r.inverse();
         let R = &setup_params.g1 * &r;
