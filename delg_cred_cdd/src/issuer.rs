@@ -148,20 +148,42 @@ impl CredChain {
     }
 
     pub fn extend_with_odd(&mut self, link: CredLinkOdd) -> DelgResult<()> {
-        // TODO: Add more validations so that there are no duplicate levels or gaps
-        // TODO: Maybe verify the link too.
         if link.level % 2 == 0 {
             return Err(DelgError::ExpectedOddLevel { given: link.level });
+        }
+        if self.odd_size() == 0 && link.level != 1 {
+            return Err(DelgError::UnexpectedLevel {
+                expected: 1,
+                given: link.level,
+            });
+        } else if self.odd_size() != 0
+            && ((link.level - self.odd_links[self.odd_size() - 1].level) != 2)
+        {
+            return Err(DelgError::UnexpectedLevel {
+                expected: self.odd_links[self.odd_size() - 1].level + 2,
+                given: link.level,
+            });
         }
         self.odd_links.push(link);
         Ok(())
     }
 
     pub fn extend_with_even(&mut self, link: CredLinkEven) -> DelgResult<()> {
-        // TODO: Add more validations so that there are no duplicate levels or gaps
-        // TODO: Maybe verify the link too.
         if link.level % 2 != 0 {
             return Err(DelgError::ExpectedEvenLevel { given: link.level });
+        }
+        if self.even_size() == 0 && link.level != 2 {
+            return Err(DelgError::UnexpectedLevel {
+                expected: 2,
+                given: link.level,
+            });
+        } else if self.even_size() != 0
+            && ((link.level - self.even_links[self.even_size() - 1].level) != 2)
+        {
+            return Err(DelgError::UnexpectedLevel {
+                expected: self.even_links[self.even_size() - 1].level + 2,
+                given: link.level,
+            });
         }
         self.even_links.push(link);
         Ok(())
@@ -201,17 +223,56 @@ impl CredChain {
         setup_params_1: &Groth1SetupParams,
         setup_params_2: &Groth2SetupParams,
     ) -> DelgResult<bool> {
-        // TODO: Check that even_level_vks and odd_level_vks are sufficient for verkeys needed for this chain
-        // TODO: Check that delegatee verkey at one level is the delegator verkey at next level.
-        // TODO: Add more validations so to check for duplicate levels or gaps in chain
-        assert_eq!(even_level_vks.len() + odd_level_vks.len(), self.size() + 1);
+        if self.size() == 0 {
+            return Err(DelgError::ChainEmpty {});
+        }
+        if (even_level_vks.len() + odd_level_vks.len()) != (self.size() + 1) {
+            return Err(DelgError::IncorrectNumberOfVerkeys {
+                expected: self.size() + 1,
+                given: even_level_vks.len() + odd_level_vks.len(),
+            });
+        }
+        if even_level_vks.len() != ((self.size() / 2) + 1) {
+            return Err(DelgError::IncorrectNumberOfEvenLevelVerkeys {
+                expected: (self.size() / 2) + 1,
+                given: even_level_vks.len(),
+            });
+        }
+        if self.size() % 2 == 1 {
+            if odd_level_vks.len() != ((self.size() / 2) + 1) {
+                return Err(DelgError::IncorrectNumberOfOddLevelVerkeys {
+                    expected: (self.size() / 2) + 1,
+                    given: odd_level_vks.len(),
+                });
+            }
+        } else {
+            if odd_level_vks.len() != (self.size() / 2) {
+                return Err(DelgError::IncorrectNumberOfOddLevelVerkeys {
+                    expected: self.size() / 2,
+                    given: odd_level_vks.len(),
+                });
+            }
+        }
+
         for i in 1..=self.size() {
             let r = if i % 2 == 1 {
                 let idx = i / 2;
                 let link = &self.odd_links[idx];
+                if link.level != i {
+                    return return Err(DelgError::UnexpectedLevel {
+                        expected: i,
+                        given: link.level,
+                    });
+                }
                 link.verify(odd_level_vks[idx], even_level_vks[idx], setup_params_1)?
             } else {
                 let link = &self.even_links[(i / 2) - 1];
+                if link.level != i {
+                    return return Err(DelgError::UnexpectedLevel {
+                        expected: i,
+                        given: link.level,
+                    });
+                }
                 link.verify(
                     even_level_vks[i / 2],
                     odd_level_vks[(i / 2) - 1],
@@ -228,14 +289,19 @@ impl CredChain {
     /// Returns a truncated version of the current chain. Does not modify the current chain but clones the links.
     pub fn get_truncated(&self, size: usize) -> DelgResult<Self> {
         if size > self.size() {
-            return Err(DelgError::ChainIsShorterThanExpected {actual_size: self.size(), expected_size: size})
+            return Err(DelgError::ChainIsShorterThanExpected {
+                actual_size: self.size(),
+                expected_size: size,
+            });
         }
         let mut new_chain = CredChain::new();
         for i in 1..=size {
             if (i % 2) == 1 {
                 new_chain.odd_links.push(self.odd_links[i / 2].clone());
             } else {
-                new_chain.even_links.push(self.even_links[(i / 2) - 1].clone());
+                new_chain
+                    .even_links
+                    .push(self.even_links[(i / 2) - 1].clone());
             }
         }
         Ok(new_chain)
@@ -571,6 +637,11 @@ mod tests {
             )
             .unwrap();
         let mut chain_1 = CredChain::new();
+
+        assert!(chain_1
+            .verify_delegations(vec![&l_0_issuer_vk], vec![], &params1, &params2)
+            .is_err());
+
         chain_1.extend_with_odd(cred_link_1).unwrap();
 
         assert!(chain_1
@@ -771,5 +842,157 @@ mod tests {
                 &params2
             )
             .unwrap());
+    }
+
+    #[test]
+    fn test_delegation_chain_extension() {
+        let max_attributes = 3;
+        let label = "test".as_bytes();
+        let params1 = GrothS1::setup(max_attributes, label);
+        let params2 = GrothS2::setup(max_attributes, label);
+
+        let l_0_issuer = EvenLevelIssuer::new(0).unwrap();
+        let l_1_issuer = OddLevelIssuer::new(1).unwrap();
+        let l_2_issuer = EvenLevelIssuer::new(2).unwrap();
+        let l_3_issuer = OddLevelIssuer::new(3).unwrap();
+        let l_4_issuer = EvenLevelIssuer::new(4).unwrap();
+        let l_5_issuer = OddLevelIssuer::new(5).unwrap();
+
+        let (l_0_issuer_sk, l_0_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+        let (l_1_issuer_sk, l_1_issuer_vk) = OddLevelIssuer::keygen(&params2);
+        let (l_2_issuer_sk, l_2_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+        let (l_3_issuer_sk, l_3_issuer_vk) = OddLevelIssuer::keygen(&params2);
+        let (l_4_issuer_sk, l_4_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+        let (l_5_issuer_sk, l_5_issuer_vk) = OddLevelIssuer::keygen(&params2);
+        let (l_6_issuer_sk, l_6_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+
+        let attributes_1: G1Vector = (0..max_attributes - 1)
+            .map(|_| G1::random())
+            .collect::<Vec<G1>>()
+            .into();
+        let cred_link_1 = l_0_issuer
+            .delegate(
+                attributes_1.clone(),
+                l_1_issuer_vk.clone(),
+                &l_0_issuer_sk,
+                &params1,
+            )
+            .unwrap();
+
+        assert!(cred_link_1
+            .verify(&l_1_issuer_vk, &l_0_issuer_vk, &params1)
+            .unwrap());
+
+        let attributes_2: G2Vector = (0..max_attributes - 1)
+            .map(|_| G2::random())
+            .collect::<Vec<G2>>()
+            .into();
+        let cred_link_2 = l_1_issuer
+            .delegate(
+                attributes_2.clone(),
+                l_2_issuer_vk.clone(),
+                &l_1_issuer_sk,
+                &params2,
+            )
+            .unwrap();
+        assert!(cred_link_2
+            .verify(&l_2_issuer_vk, &l_1_issuer_vk, &params2)
+            .unwrap());
+
+        let attributes_3: G1Vector = (0..max_attributes - 1)
+            .map(|_| G1::random())
+            .collect::<Vec<G1>>()
+            .into();
+        let cred_link_3 = l_2_issuer
+            .delegate(
+                attributes_3.clone(),
+                l_3_issuer_vk.clone(),
+                &l_2_issuer_sk,
+                &params1,
+            )
+            .unwrap();
+        assert!(cred_link_3
+            .verify(&l_3_issuer_vk, &l_2_issuer_vk, &params1)
+            .unwrap());
+
+        let attributes_4: G2Vector = (0..max_attributes - 1)
+            .map(|_| G2::random())
+            .collect::<Vec<G2>>()
+            .into();
+        let cred_link_4 = l_3_issuer
+            .delegate(
+                attributes_4.clone(),
+                l_4_issuer_vk.clone(),
+                &l_3_issuer_sk,
+                &params2,
+            )
+            .unwrap();
+        assert!(cred_link_4
+            .verify(&l_4_issuer_vk, &l_3_issuer_vk, &params2)
+            .unwrap());
+
+        let attributes_5: G1Vector = (0..max_attributes - 1)
+            .map(|_| G1::random())
+            .collect::<Vec<G1>>()
+            .into();
+        let cred_link_5 = l_4_issuer
+            .delegate(
+                attributes_5.clone(),
+                l_5_issuer_vk.clone(),
+                &l_4_issuer_sk,
+                &params1,
+            )
+            .unwrap();
+
+        let attributes_6: G2Vector = (0..max_attributes - 1)
+            .map(|_| G2::random())
+            .collect::<Vec<G2>>()
+            .into();
+        let cred_link_6 = l_5_issuer
+            .delegate(
+                attributes_6.clone(),
+                l_6_issuer_vk.clone(),
+                &l_5_issuer_sk,
+                &params2,
+            )
+            .unwrap();
+
+        let mut chain_1 = CredChain::new();
+
+        // Make level of odd link even
+        let mut morphed_link = cred_link_3.clone();
+        morphed_link.level = 2;
+        assert!(chain_1.extend_with_odd(morphed_link).is_err());
+
+        // Try to extend chain of length 0 with odd link of level 3
+        assert!(chain_1.extend_with_odd(cred_link_3.clone()).is_err());
+
+        chain_1.extend_with_odd(cred_link_1).unwrap();
+
+        let mut chain_2 = chain_1.clone();
+
+        // Make level of even link odd
+        let mut morphed_link = cred_link_2.clone();
+        morphed_link.level = 1;
+        assert!(chain_2.extend_with_even(morphed_link).is_err());
+
+        // Try to extend chain with no even links with even link of level 4
+        assert!(chain_2.extend_with_even(cred_link_4.clone()).is_err());
+
+        chain_2.extend_with_even(cred_link_2).unwrap();
+
+        let mut chain_3 = chain_2.clone();
+
+        // Try to extend chain last odd link of level 1 with odd link of level 5
+        assert!(chain_3.extend_with_odd(cred_link_5).is_err());
+
+        chain_3.extend_with_odd(cred_link_3).unwrap();
+
+        let mut chain_4 = chain_3.clone();
+
+        // Try to extend chain last even link of level 2 with odd link of level 6
+        assert!(chain_4.extend_with_even(cred_link_6).is_err());
+
+        chain_4.extend_with_even(cred_link_4).unwrap();
     }
 }

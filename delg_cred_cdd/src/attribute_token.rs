@@ -164,21 +164,23 @@ impl PrecompForCommitmentReconstitution {
     }
 }
 
-// TODO: Convert asserts in non-test code to errors
-
 macro_rules! check_blindings_count {
     ( $self:ident, $i: ident, $link:ident, $unrevealed_attr_count:ident ) => {{
-
         if $self.blindings_t[$i - 1].len() != $link.signature.T.len() {
-            Err(DelgError::GeneralError { msg: format!("t blindings count unequal to t count") })
+            Err(DelgError::GeneralError {
+                msg: format!("t blindings count unequal to t count"),
+            })
         } else if $link.attribute_count() != $link.signature.T.len() {
-            Err(DelgError::GeneralError { msg: format!("attribute count unequal to t count") })
+            Err(DelgError::GeneralError {
+                msg: format!("attribute count unequal to t count"),
+            })
         } else if $self.blindings_a[$i - 1].len() != $unrevealed_attr_count {
-            Err(DelgError::GeneralError { msg: format!("attribute blidnding count unequal to unrevealed attribute count") })
+            Err(DelgError::GeneralError {
+                msg: format!("attribute blidnding count unequal to unrevealed attribute count"),
+            })
         } else {
             Ok(())
         }
-
     }};
 }
 
@@ -225,18 +227,7 @@ impl<'a> AttributeToken<'a> {
         even_level_vks: Vec<&EvenLevelVerkey>,
         odd_level_vks: Vec<&OddLevelVerkey>,
     ) -> DelgResult<AttributeTokenResp> {
-        if at.comms_t.len() != self.L {
-            return Err(DelgError::IncorrectNumberOfTCommitments {
-                expected: self.L,
-                given: at.comms_t.len(),
-            });
-        }
-        if (at.odd_level_revealed_attributes.len() + at.even_level_revealed_attributes.len()) != self.L {
-            return Err(DelgError::IncorrectNumberOfRevealedAttributeSets {
-                expected: self.L,
-                given: at.odd_level_revealed_attributes.len() + at.even_level_revealed_attributes.len(),
-            });
-        }
+        at.validate(self.L)?;
 
         let mut resp_csk = FieldElement::zero();
         let mut odd_level_resp_vk = G1Vector::new(0);
@@ -397,19 +388,8 @@ impl<'a> AttributeToken<'a> {
         setup_params_1: &Groth1SetupParams,
         setup_params_2: &Groth2SetupParams,
     ) -> DelgResult<AttributeTokenComm> {
-        if comm.comms_t.len() != L {
-            return Err(DelgError::IncorrectNumberOfTCommitments {
-                expected: L,
-                given: comm.comms_t.len(),
-            });
-        }
-
-        if comm.comms_s.len() != L {
-            return Err(DelgError::IncorrectNumberOfSCommitments {
-                expected: L,
-                given: comm.comms_s.len(),
-            });
-        }
+        comm.validate(L)?;
+        resp.validate(L)?;
 
         let mut comms_s = Vec::<GT>::with_capacity(L);
         let mut comms_t = Vec::<Vec<GT>>::with_capacity(L);
@@ -444,7 +424,7 @@ impl<'a> AttributeToken<'a> {
                 let unrevealed_attr_count = attr_count - revealed[i - 1].len();
                 if attr_count > setup_params_1.y.len() {
                     return Err(DelgError::MoreAttributesThanExpected {
-                        expected: setup_params_1.y.len()+1,
+                        expected: setup_params_1.y.len() + 1,
                         given: attr_count,
                     });
                 }
@@ -590,7 +570,7 @@ impl<'a> AttributeToken<'a> {
                 let unrevealed_attr_count = attr_count - revealed[i - 1].len();
                 if attr_count > setup_params_2.y.len() {
                     return Err(DelgError::MoreAttributesThanExpected {
-                        expected: setup_params_2.y.len()+1,
+                        expected: setup_params_2.y.len() + 1,
                         given: attr_count,
                     });
                 }
@@ -610,7 +590,6 @@ impl<'a> AttributeToken<'a> {
                 );
                 let com_i_s = GT::mul(&e_1, &g1_y0_c);
                 comms_s.push(com_i_s);
-
 
                 let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
                 let mut k = 0;
@@ -923,19 +902,8 @@ impl<'a> AttributeToken<'a> {
         setup_params_2: &Groth2SetupParams,
         precomputed: &PrecompForCommitmentReconstitution,
     ) -> DelgResult<AttributeTokenComm> {
-        if comm.comms_t.len() != L {
-            return Err(DelgError::IncorrectNumberOfTCommitments {
-                expected: L,
-                given: comm.comms_t.len(),
-            });
-        }
-
-        if comm.comms_s.len() != L {
-            return Err(DelgError::IncorrectNumberOfSCommitments {
-                expected: L,
-                given: comm.comms_s.len(),
-            });
-        }
+        comm.validate(L)?;
+        resp.validate(L)?;
 
         let mut comms_s = Vec::<GT>::with_capacity(L);
         let mut comms_t = Vec::<Vec<GT>>::with_capacity(L);
@@ -966,7 +934,7 @@ impl<'a> AttributeToken<'a> {
                 let unrevealed_attr_count = attr_count - revealed[i - 1].len();
                 if attr_count > setup_params_1.y.len() {
                     return Err(DelgError::MoreAttributesThanExpected {
-                        expected: setup_params_1.y.len()+1,
+                        expected: setup_params_1.y.len() + 1,
                         given: attr_count,
                     });
                 }
@@ -1113,7 +1081,7 @@ impl<'a> AttributeToken<'a> {
                 let unrevealed_attr_count = attr_count - revealed[i - 1].len();
                 if attr_count > setup_params_2.y.len() {
                     return Err(DelgError::MoreAttributesThanExpected {
-                        expected: setup_params_2.y.len()+1,
+                        expected: setup_params_2.y.len() + 1,
                         given: attr_count,
                     });
                 }
@@ -1209,7 +1177,91 @@ impl<'a> AttributeToken<'a> {
     }
 }
 
+macro_rules! check_odd_collection_length {
+    ( $collection:expr, $L: ident, $entity_type:expr ) => {{
+        if $L % 2 == 1 {
+            if $collection.len() != (($L / 2) + 1) {
+                Err(DelgError::IncorrectNumberOfOddValues {
+                    expected: ($L / 2) + 1,
+                    given: $collection.len(),
+                    entity_type: $entity_type,
+                })
+            } else {
+                Ok(())
+            }
+        } else {
+            if $collection.len() != ($L / 2) {
+                return Err(DelgError::IncorrectNumberOfOddValues {
+                    expected: $L / 2,
+                    given: $collection.len(),
+                    entity_type: $entity_type,
+                });
+            } else {
+                Ok(())
+            }
+        }
+    }};
+}
+
+macro_rules! check_even_collection_length {
+    ( $collection:expr, $L: ident, $entity_type:expr ) => {{
+        if $collection.len() != ($L / 2) {
+            Err(DelgError::IncorrectNumberOfEvenValues {
+                expected: $L / 2,
+                given: $collection.len(),
+                entity_type: $entity_type,
+            })
+        } else {
+            Ok(())
+        }
+    }};
+}
+
 impl AttributeTokenComm {
+    pub fn validate(&self, L: usize) -> DelgResult<()> {
+        if self.comms_t.len() != L {
+            return Err(DelgError::IncorrectNumberOfTCommitments {
+                expected: L,
+                given: self.comms_t.len(),
+            });
+        }
+        if self.comms_s.len() != L {
+            return Err(DelgError::IncorrectNumberOfSCommitments {
+                expected: L,
+                given: self.comms_s.len(),
+            });
+        }
+        if (self.odd_level_revealed_attributes.len() + self.even_level_revealed_attributes.len())
+            != L
+        {
+            return Err(DelgError::IncorrectNumberOfRevealedAttributeSets {
+                expected: L,
+                given: self.odd_level_revealed_attributes.len()
+                    + self.even_level_revealed_attributes.len(),
+            });
+        }
+        if (self.odd_level_blinded_r.len() + self.even_level_blinded_r.len()) != L {
+            return Err(DelgError::IncorrectNumberOfBlindedR {
+                expected: L,
+                given: self.odd_level_blinded_r.len() + self.even_level_blinded_r.len(),
+            });
+        }
+
+        check_odd_collection_length!(
+            self.odd_level_revealed_attributes,
+            L,
+            "revealed attributes".to_string()
+        )?;
+        check_odd_collection_length!(self.odd_level_blinded_r, L, "blinded r".to_string())?;
+        check_even_collection_length!(
+            self.even_level_revealed_attributes,
+            L,
+            "revealed attributes".to_string()
+        )?;
+        check_even_collection_length!(self.even_level_blinded_r, L, "blinded r".to_string())?;
+        Ok(())
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::<u8>::new();
         for c in self.comms_s.iter() {
@@ -1239,6 +1291,27 @@ impl AttributeTokenComm {
             }
         }
         bytes
+    }
+}
+
+impl AttributeTokenResp {
+    pub fn validate(&self, L: usize) -> DelgResult<()> {
+        if (self.odd_level_resp_s.len() + self.even_level_resp_s.len()) != L {
+            return Err(DelgError::UnequalNoOfCommitmentAndResponses {
+                count_commitments: L,
+                count_responses: self.odd_level_resp_s.len() + self.even_level_resp_s.len(),
+                entity_type: "s from signature".to_string(),
+            });
+        }
+
+        if (self.odd_level_resp_t.len() + self.even_level_resp_t.len()) != L {
+            return Err(DelgError::UnequalNoOfCommitmentAndResponses {
+                count_commitments: L,
+                count_responses: self.odd_level_resp_t.len() + self.even_level_resp_t.len(),
+                entity_type: "t from signature".to_string(),
+            });
+        }
+        Ok(())
     }
 }
 
@@ -2212,5 +2285,109 @@ mod tests {
             );
             println!("Commitment reconstitution with precomputation on setup paprams and root issuer key takes {:?}", recon_precomp_duration);
         }
+    }
+
+    #[test]
+    fn test_attribute_token_validations() {
+        let max_attributes = 3;
+        let label = "test".as_bytes();
+
+        println!(
+            "Each credential will have {} attributes",
+            max_attributes - 1
+        );
+
+        let params1 = GrothS1::setup(max_attributes, label);
+        let params2 = GrothS2::setup(max_attributes, label);
+
+        let l_0_issuer = EvenLevelIssuer::new(0).unwrap();
+        let l_1_issuer = OddLevelIssuer::new(1).unwrap();
+        let l_2_issuer = EvenLevelIssuer::new(2).unwrap();
+        let l_3_issuer = OddLevelIssuer::new(3).unwrap();
+
+        let (l_0_issuer_sk, l_0_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+        let (l_1_issuer_sk, l_1_issuer_vk) = OddLevelIssuer::keygen(&params2);
+        let (l_2_issuer_sk, l_2_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+        let (l_3_issuer_sk, l_3_issuer_vk) = OddLevelIssuer::keygen(&params2);
+        let (l_4_issuer_sk, l_4_issuer_vk) = EvenLevelIssuer::keygen(&params1);
+
+        let attributes_1: G1Vector = (0..max_attributes - 1)
+            .map(|_| G1::random())
+            .collect::<Vec<G1>>()
+            .into();
+        let cred_link_1 = l_0_issuer
+            .delegate(
+                attributes_1.clone(),
+                l_1_issuer_vk.clone(),
+                &l_0_issuer_sk,
+                &params1,
+            )
+            .unwrap();
+
+        assert!(cred_link_1
+            .verify(&l_1_issuer_vk, &l_0_issuer_vk, &params1)
+            .unwrap());
+
+        let mut chain_1 = CredChain::new();
+        chain_1.extend_with_odd(cred_link_1).unwrap();
+
+        let mut at_1 = AttributeToken::new(&chain_1, &params1, &params2);
+
+        // Supplying more or less collections of revealed attributes.
+        assert!(at_1.commitment(vec![]).is_err());
+        assert!(at_1.commitment(vec![HashSet::<usize>::new(); 2]).is_err());
+
+        // Supplying same number of collections of revealed attributes as the chain size
+        let com_1 = at_1.commitment(vec![HashSet::<usize>::new(); 1]).unwrap();
+
+        let c_1 = AttributeToken::gen_challenge(&com_1, &l_0_issuer_vk);
+
+        let mut morphed_commitment = com_1.clone();
+        // Adding an element of comms_s to increase its size
+        morphed_commitment.comms_s.push(morphed_commitment.comms_s[0].clone());
+        assert!(at_1
+            .response(&morphed_commitment, &l_1_issuer_sk.0, &c_1, vec![], vec![&l_1_issuer_vk]).is_err());
+        // Remove the added element
+        morphed_commitment.comms_s.pop().unwrap();
+
+        // Adding an element of comms_t to increase its size
+        morphed_commitment.comms_t.push(vec![]);
+        assert!(at_1
+            .response(&morphed_commitment, &l_1_issuer_sk.0, &c_1, vec![], vec![&l_1_issuer_vk]).is_err());
+        // Remove the added element
+        morphed_commitment.comms_t.pop().unwrap();
+
+        // Decrease size of comms_s
+        morphed_commitment.comms_s.pop().unwrap();
+        assert!(at_1
+            .response(&morphed_commitment, &l_1_issuer_sk.0, &c_1, vec![], vec![&l_1_issuer_vk]).is_err());
+
+        // Decrease size of comms_t
+        morphed_commitment.comms_t.pop().unwrap();
+        assert!(at_1
+            .response(&morphed_commitment, &l_1_issuer_sk.0, &c_1, vec![], vec![&l_1_issuer_vk]).is_err());
+
+        let resp_1 = at_1
+            .response(&com_1, &l_1_issuer_sk.0, &c_1, vec![], vec![&l_1_issuer_vk])
+            .unwrap();
+
+        let attributes_2: G2Vector = (0..max_attributes - 1)
+            .map(|_| G2::random())
+            .collect::<Vec<G2>>()
+            .into();
+        let cred_link_2 = l_1_issuer
+            .delegate(
+                attributes_2.clone(),
+                l_2_issuer_vk.clone(),
+                &l_1_issuer_sk,
+                &params2,
+            )
+            .unwrap();
+        assert!(cred_link_2
+            .verify(&l_2_issuer_vk, &l_1_issuer_vk, &params2)
+            .unwrap());
+
+        let mut chain_2 = chain_1.clone();
+        chain_2.extend_with_even(cred_link_2).unwrap();
     }
 }
