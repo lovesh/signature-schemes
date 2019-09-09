@@ -6,8 +6,8 @@ use crate::issuer::{CredChain, EvenLevelVerkey, OddLevelVerkey};
 use amcl_wrapper::extension_field_gt::GT;
 use amcl_wrapper::field_elem::{FieldElement, FieldElementVector};
 use amcl_wrapper::group_elem::{GroupElement, GroupElementVector};
-use amcl_wrapper::group_elem_g1::{G1Vector, G1};
-use amcl_wrapper::group_elem_g2::{G2Vector, G2};
+use amcl_wrapper::group_elem_g1::{G1Vector, G1, G1LookupTable};
+use amcl_wrapper::group_elem_g2::{G2Vector, G2, G2LookupTable};
 use std::collections::{HashMap, HashSet};
 use std::ops::Add;
 
@@ -395,13 +395,19 @@ impl<'a> AttributeToken<'a> {
         let groth2_neg_g2 = -&setup_params_2.g2;
 
         let challenge_neg = -challenge;
-        // XXX: Following can use variable time scalar multiplication. Use
+        let challenge_neg_wnaf = challenge_neg.to_wnaf(5);
+
+        let groth2_g1_table = G1LookupTable::from(&setup_params_2.g1);
+        let groth1_g2_table = G2LookupTable::from(&setup_params_1.g2);
+        let ipk_table = G2LookupTable::from(&ipk.0);
+
         // g1^-c
-        let groth2_g1_c = &setup_params_2.g1 * &challenge_neg;
+        let groth2_g1_c = G1::wnaf_mul(&groth2_g1_table, &challenge_neg_wnaf);
         // g2^-c
-        let groth1_g2_c = &setup_params_1.g2 * &challenge_neg;
+        let groth1_g2_c = G2::wnaf_mul(&groth1_g2_table, &challenge_neg_wnaf);
         // ipk^-c
-        let ipk_c = &ipk.0 * &challenge_neg;
+        let ipk_c = G2::wnaf_mul(&ipk_table, &challenge_neg_wnaf);
+
         // e(y0, g2)^{-c}
         let y0_g2_c =  GT::ate_pairing(&setup_params_1.y[0], &groth1_g2_c);
         // e(g1, y0)^{-c} = e(g1^{-c}, y0)
@@ -1218,21 +1224,31 @@ impl<'a> AttributeToken<'a> {
         let groth2_neg_g2 = -&setup_params_2.g2;
 
         let challenge_neg = -challenge;
+        let challenge_neg_wnaf = challenge_neg.to_wnaf(5);
+
+        let groth2_g1_table = G1LookupTable::from(&setup_params_2.g1);
+        let groth2_g2_table = G2LookupTable::from(&setup_params_2.g2);
+        let groth1_g1_table = G1LookupTable::from(&setup_params_1.g1);
+        let groth1_g2_table = G2LookupTable::from(&setup_params_1.g2);
+        let ipk_table = G2LookupTable::from(&ipk.0);
+
         // g1^-c
-        let groth2_g1_c = &setup_params_2.g1 * &challenge_neg;
+        let groth2_g1_c = G1::wnaf_mul(&groth2_g1_table, &challenge_neg_wnaf);
         // g2^-c
-        let groth1_g2_c = &setup_params_1.g2 * &challenge_neg;
+        let groth1_g2_c = G2::wnaf_mul(&groth1_g2_table, &challenge_neg_wnaf);
         // ipk^-c
-        let ipk_c = &ipk.0 * &challenge_neg;
+        let ipk_c = G2::wnaf_mul(&ipk_table, &challenge_neg_wnaf);
+
+        let ipk_c_table = G2LookupTable::from(&ipk_c);
+        let groth1_g2_c_table = G2LookupTable::from(&groth1_g2_c);
+
         // e(y0, g2)^{-c}
-        let y0_g2_c = GT::ate_pairing(&setup_params_1.y[0], &groth1_g2_c);
+        let y0_g2_c =  GT::ate_pairing(&setup_params_1.y[0], &groth1_g2_c);
         // e(g1, y0)^{-c} = e(g1^{-c}, y0)
         let g1_y0_c = GT::ate_pairing(&groth2_g1_c, &setup_params_2.y[0]);
 
-        let groth1_table_g1 = G1LookupTable::from(&setup_params_1.g1);
-        let groth1_table_g2 = G2LookupTable::from(&setup_params_1.g2);
-        let ipk_c_table = G2LookupTable::from(&ipk_c);
-        let groth1_g2_c = G2LookupTable::from(&groth1_g2_c);
+        let mut temp_G1 = vec![];
+        let mut temp_G2 = vec![];
 
         for i in 1..=L {
             if i % 2 == 1 {
@@ -1255,7 +1271,7 @@ impl<'a> AttributeToken<'a> {
 
                 // e(y[j], ipk)^-c can be changed to e(y[j], ipk^-c) and ipk^-c can be computed once for all odd levels.
                 // Then e(y[j], ipk)^-c can then be used in a multi-pairing.
-                let com_i_s = if i == 1 {
+                if i == 1 {
                     // e(resp_s_i, r'_i) * e(g1, ipk)^-c
                     // e(g1, ipk)^-c = e(g1, ipk^-c) => e(resp_s_i, r'_i) * e(g1, ipk^-c)
                     pairing_elems.push((&resp.odd_level_resp_s[i / 2], &comm.odd_level_blinded_r[i / 2]));
@@ -1264,29 +1280,33 @@ impl<'a> AttributeToken<'a> {
                     accum_precomp_products = y0_g2_c.clone();
                     commitments_product = comm.comms_s[i].inverse();
 
-                    let e_1 = GT::ate_2_pairing(
+                    /*let e_1 = GT::ate_2_pairing(
                         &resp.odd_level_resp_s[i / 2],
                         &comm.odd_level_blinded_r[i / 2],
                         &setup_params_1.g1,
                         &ipk_c,
                     );
                     // e(resp_s_i, r'_i) * ( e(g1, ipk) * e(y0, g2) )^-c
-                    GT::mul(&e_1, &y0_g2_c)
+                    GT::mul(&e_1, &y0_g2_c)*/
                 } else {
-                    let last_blinding = &b_vec[b_vec.len() - 1];
+                    // XXX: Use w-NAF of `blinding`
+                    let blinding = &b_vec[b_vec.len() - 1];
                     // e(resp_s_i, r'_i) * e(-g1, resp_vk_{i-1})
-                    pairing_elems.push((&(&resp.odd_level_resp_s[i / 2] * last_blinding), &comm.odd_level_blinded_r[i / 2]));
-
-                    let e_1 = GT::ate_2_pairing(
+                    pairing_elems.push((&(&resp.odd_level_resp_s[i / 2] * blinding), &comm.odd_level_blinded_r[i / 2]));
+                    pairing_elems.push((&(&groth1_neg_g1 * blinding), &resp.even_level_resp_vk[(i / 2) - 1]));
+                    accum_precomp_products = GT::mul(&accum_precomp_products, &(y0_g2_c.pow(blinding)));
+                    commitments_product = GT::mul(&commitments_product, &comm.comms_s[i].pow(&-blinding));
+                    /*let e_1 = GT::ate_2_pairing(
                         &resp.odd_level_resp_s[i / 2],
                         &comm.odd_level_blinded_r[i / 2],
                         &groth1_neg_g1,
                         &resp.even_level_resp_vk[(i / 2) - 1],
-                    );
+                    );*/
                     // e(y0, g2)^-c
-                    GT::mul(&e_1, &y0_g2_c)
-                };
-                comms_s.push(com_i_s);
+                    //GT::mul(&e_1, &y0_g2_c)
+                }
+                b_vec.push(&b_vec[b_vec.len() - 1] * &b);
+                //comms_s.push(com_i_s);
 
                 let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
                 let mut k = 0;
@@ -1294,17 +1314,41 @@ impl<'a> AttributeToken<'a> {
                 // Last attribute is the verkey so skip for now
                 for j in 0..(attr_count - 1) {
                     if !revealed[i - 1].contains(&j) {
+                        let blinding = &b_vec[b_vec.len() - 1];
                         if i == 1 {
-                            com_t.push(GT::ate_multi_pairing(vec![
+                            pairing_elems.push((
+                                &(&resp.odd_level_resp_t[i / 2][j] * blinding),
+                                &comm.odd_level_blinded_r[i / 2],
+                            ));
+                            pairing_elems.push(
+                                (&(&resp.odd_level_resp_a[i / 2][k] * blinding), &groth1_neg_g2)
+                            );
+                            pairing_elems.push((&(&setup_params_1.y[j] * blinding), &ipk_c));
+                            /*com_t.push(GT::ate_multi_pairing(vec![
                                 (
                                     &resp.odd_level_resp_t[i / 2][j],
                                     &comm.odd_level_blinded_r[i / 2],
                                 ),
                                 (&resp.odd_level_resp_a[i / 2][k], &groth1_neg_g2),
                                 (&setup_params_1.y[j], &ipk_c),
-                            ]));
+                            ]));*/
                         } else {
-                            com_t.push(GT::ate_multi_pairing(vec![
+                            pairing_elems.push(
+                                (
+                                    &(&resp.odd_level_resp_t[i / 2][j] * blinding),
+                                    &comm.odd_level_blinded_r[i / 2],
+                                )
+                            );
+                            pairing_elems.push(
+                                (&(&resp.odd_level_resp_a[i / 2][k] * blinding), &groth1_neg_g2)
+                            );
+                            pairing_elems.push(
+                                (
+                                    &(-&(&setup_params_1.y[j] * blinding)),
+                                    &resp.even_level_resp_vk[(i / 2) - 1],
+                                )
+                            );
+                            /*com_t.push(GT::ate_multi_pairing(vec![
                                 (
                                     &resp.odd_level_resp_t[i / 2][j],
                                     &comm.odd_level_blinded_r[i / 2],
@@ -1314,21 +1358,42 @@ impl<'a> AttributeToken<'a> {
                                     &(-&setup_params_1.y[j]),
                                     &resp.even_level_resp_vk[(i / 2) - 1],
                                 ),
-                            ]));
+                            ]));*/
                         }
+                        commitments_product = GT::mul(&commitments_product, &comm.comms_t[i][j].pow(&-blinding));
+                        b_vec.push(&b_vec[b_vec.len() - 1] * &b);
                         k += 1;
                     } else {
+                        let blinding = &b_vec[b_vec.len() - 1];
                         if i == 1 {
-                            com_t.push(GT::ate_multi_pairing(vec![
+                            pairing_elems.push(
+                                (
+                                    &(&resp.odd_level_resp_t[i / 2][j] * blinding),
+                                    &comm.odd_level_blinded_r[i / 2],
+                                )
+                            );
+                            pairing_elems.push(
+                                (&(&comm.odd_level_revealed_attributes[i / 2][&j] * blinding), &groth1_g2_c)
+                            );
+                            pairing_elems.push((&(&setup_params_1.y[j] * blinding), &ipk_c));
+                            /*com_t.push(GT::ate_multi_pairing(vec![
                                 (
                                     &resp.odd_level_resp_t[i / 2][j],
                                     &comm.odd_level_blinded_r[i / 2],
                                 ),
                                 (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c),
                                 (&setup_params_1.y[j], &ipk_c),
-                            ]));
+                            ]));*/
                         } else {
-                            com_t.push(GT::ate_multi_pairing(vec![
+                            pairing_elems.push(
+                                (
+                                    &(&resp.odd_level_resp_t[i / 2][j] * blinding),
+                                    &comm.odd_level_blinded_r[i / 2],
+                                )
+                            );
+                            pairing_elems.push((&(-&(&setup_params_1.y[j] * blinding)), &resp.even_level_resp_vk[(i / 2) - 1]));
+                            pairing_elems.push((&(&comm.odd_level_revealed_attributes[i / 2][&j] * blinding), &groth1_g2_c));
+                            /*com_t.push(GT::ate_multi_pairing(vec![
                                 (
                                     &resp.odd_level_resp_t[i / 2][j],
                                     &comm.odd_level_blinded_r[i / 2],
@@ -1338,24 +1403,50 @@ impl<'a> AttributeToken<'a> {
                                     &resp.even_level_resp_vk[(i / 2) - 1],
                                 ),
                                 (&comm.odd_level_revealed_attributes[i / 2][&j], &groth1_g2_c),
-                            ]));
+                            ]));*/
                         }
+                        commitments_product = GT::mul(&commitments_product, &comm.comms_t[i][j].pow(&-blinding));
+                        b_vec.push(&b_vec[b_vec.len() - 1] * &b);
                     }
                 }
 
                 // For verkey
-                let com_i_vk = if i == 1 {
+                let blinding = &b_vec[b_vec.len() - 1];
+                if i == 1 {
                     if i != L {
-                        GT::ate_multi_pairing(vec![
+                        pairing_elems.push((
+                            &(&resp.odd_level_resp_t[i / 2][attr_count - 1] * blinding),
+                            &comm.odd_level_blinded_r[i / 2],
+                        ));
+                        pairing_elems.push(
+                            (&(&resp.odd_level_resp_vk[i / 2] * blinding), &groth1_neg_g2)
+                        );
+                        pairing_elems.push((&(&setup_params_1.y[attr_count - 1] * blinding), &ipk_c));
+                        /*GT::ate_multi_pairing(vec![
                             (
                                 &resp.odd_level_resp_t[i / 2][attr_count - 1],
                                 &comm.odd_level_blinded_r[i / 2],
                             ),
                             (&resp.odd_level_resp_vk[i / 2], &groth1_neg_g2),
                             (&setup_params_1.y[attr_count - 1], &ipk_c),
-                        ])
+                        ])*/
                     } else {
-                        let e_1 = GT::ate_pairing(
+                        pairing_elems.push(
+                            (
+                                &(&resp.odd_level_resp_t[i / 2][attr_count - 1] * blinding),
+                                &comm.odd_level_blinded_r[i / 2],
+                            )
+                        );
+                        pairing_elems.push(
+                            (&(&setup_params_1.g1 * &resp.resp_csk * blinding), &groth1_neg_g2)
+                        );
+                        pairing_elems.push(
+                            (
+                                &(&setup_params_1.y[attr_count - 1] * blinding),
+                                &ipk_c,
+                            )
+                        );
+                        /*let e_1 = GT::ate_pairing(
                             &resp.odd_level_resp_t[i / 2][attr_count - 1],
                             &comm.odd_level_blinded_r[i / 2],
                         );
@@ -1363,11 +1454,23 @@ impl<'a> AttributeToken<'a> {
                         let e_3 = GT::pow(&e_2, &resp.resp_csk);
                         let e_4 = GT::mul(&e_1, &e_3);
                         let e_5 = GT::ate_pairing(&setup_params_1.y[attr_count - 1], &ipk_c);
-                        GT::mul(&e_4, &e_5)
+                        GT::mul(&e_4, &e_5)*/
                     }
                 } else {
                     if i != L {
-                        GT::ate_multi_pairing(vec![
+                        pairing_elems.push(
+                            (
+                                &(&resp.odd_level_resp_t[i / 2][attr_count - 1] * blinding),
+                                &comm.odd_level_blinded_r[i / 2],
+                            )
+                        );
+                        pairing_elems.push(
+                            (&(-&(&setup_params_1.y[attr_count - 1] * blinding)), &resp.even_level_resp_vk[(i / 2) - 1])
+                        );
+                        pairing_elems.push(
+                            (&(&resp.odd_level_resp_vk[i / 2] * blinding), &groth1_neg_g2)
+                        );
+                        /*GT::ate_multi_pairing(vec![
                             (
                                 &resp.odd_level_resp_t[i / 2][attr_count - 1],
                                 &comm.odd_level_blinded_r[i / 2],
@@ -1377,9 +1480,21 @@ impl<'a> AttributeToken<'a> {
                                 &resp.even_level_resp_vk[(i / 2) - 1],
                             ),
                             (&resp.odd_level_resp_vk[i / 2], &groth1_neg_g2),
-                        ])
+                        ])*/
                     } else {
-                        let e_1 = GT::ate_2_pairing(
+                        pairing_elems.push(
+                            (
+                                &(&resp.odd_level_resp_t[i / 2][attr_count - 1] * blinding),
+                                &comm.odd_level_blinded_r[i / 2],
+                            )
+                        );
+                        pairing_elems.push(
+                            (&(-&(&setup_params_1.y[attr_count - 1] * blinding)), &resp.even_level_resp_vk[(i / 2) - 1])
+                        );
+                        pairing_elems.push(
+                            (&(&setup_params_1.g1 * &resp.resp_csk * blinding), &groth1_neg_g2)
+                        );
+                        /*let e_1 = GT::ate_2_pairing(
                             &resp.odd_level_resp_t[i / 2][attr_count - 1],
                             &comm.odd_level_blinded_r[i / 2],
                             &(-&setup_params_1.y[attr_count - 1]),
@@ -1387,11 +1502,13 @@ impl<'a> AttributeToken<'a> {
                         );
                         let e_2 = GT::ate_pairing(&setup_params_1.g1, &groth1_neg_g2);
                         let e_3 = GT::pow(&e_2, &resp.resp_csk);
-                        GT::mul(&e_1, &e_3)
+                        GT::mul(&e_1, &e_3)*/
                     }
-                };
-                com_t.push(com_i_vk);
-                comms_t.push(com_t);
+                }
+                commitments_product = GT::mul(&commitments_product, &comm.comms_t[i][attr_count - 1].pow(&-blinding));
+                b_vec.push(&b_vec[b_vec.len() - 1] * &b);
+//                com_t.push(com_i_vk);
+//                comms_t.push(com_t);
             } else {
                 // Even level
                 let attr_count = comm.comms_t[i - 1].len();
@@ -1410,22 +1527,46 @@ impl<'a> AttributeToken<'a> {
                     });
                 }
 
-                let e_1 = GT::ate_2_pairing(
+                let blinding = &b_vec[b_vec.len() - 1];
+                pairing_elems.push((&(&comm.even_level_blinded_r[(i / 2) - 1] * blinding), &resp.even_level_resp_s[(i / 2) - 1]));
+                pairing_elems.push((&(&resp.odd_level_resp_vk[(i / 2) - 1] * blinding), &groth2_neg_g2));
+                accum_precomp_products = GT::mul(&accum_precomp_products, &(g1_y0_c.pow(blinding)));
+                commitments_product = GT::mul(&commitments_product, &comm.comms_s[i].pow(&-blinding));
+                b_vec.push(&b_vec[b_vec.len() - 1] * &b);
+
+                /*let e_1 = GT::ate_2_pairing(
                     &comm.even_level_blinded_r[(i / 2) - 1],
                     &resp.even_level_resp_s[(i / 2) - 1],
                     &resp.odd_level_resp_vk[(i / 2) - 1],
                     &groth2_neg_g2,
                 );
                 let com_i_s = GT::mul(&e_1, &g1_y0_c);
-                comms_s.push(com_i_s);
+                comms_s.push(com_i_s);*/
 
                 let mut com_t = Vec::<GT>::with_capacity(comm.comms_t[i - 1].len());
                 let mut k = 0;
 
                 // Last attribute is the verkey so skip for now
                 for j in 0..(attr_count - 1) {
+                    let blinding = &b_vec[b_vec.len() - 1];
+
                     if !revealed[i - 1].contains(&j) {
-                        com_t.push(GT::ate_multi_pairing(vec![
+                        pairing_elems.push(
+                            (
+                                &(&resp.odd_level_resp_vk[(i / 2) - 1] * blinding),
+                                &(-&setup_params_2.y[j]),
+                            )
+                        );
+                        pairing_elems.push(
+                            (
+                                &(&comm.even_level_blinded_r[(i / 2) - 1] * blinding),
+                                &resp.even_level_resp_t[(i / 2) - 1][j],
+                            )
+                        );
+                        pairing_elems.push(
+                            (&(&groth2_neg_g1 * blinding), &resp.even_level_resp_a[(i / 2) - 1][k])
+                        );
+                        /*com_t.push(GT::ate_multi_pairing(vec![
                             // XXX: -y[j] can be pre-computed
                             (
                                 &resp.odd_level_resp_vk[(i / 2) - 1],
@@ -1436,10 +1577,28 @@ impl<'a> AttributeToken<'a> {
                                 &resp.even_level_resp_t[(i / 2) - 1][j],
                             ),
                             (&groth2_neg_g1, &resp.even_level_resp_a[(i / 2) - 1][k]),
-                        ]));
+                        ]));*/
                         k += 1;
                     } else {
-                        com_t.push({
+                        pairing_elems.push(
+                            (
+                                &(&resp.odd_level_resp_vk[(i / 2) - 1] * blinding),
+                                &(-&setup_params_2.y[j]),
+                            )
+                        );
+                        pairing_elems.push(
+                            (
+                                &(&comm.even_level_blinded_r[(i / 2) - 1] * blinding),
+                                &resp.even_level_resp_t[(i / 2) - 1][j],
+                            )
+                        );
+                        pairing_elems.push(
+                            (
+                                &(&groth2_g1_c * blinding),
+                                &comm.even_level_revealed_attributes[(i / 2) - 1][&j],
+                            )
+                        );
+                        /*com_t.push({
                             // XXX: -y[j] can be pre-computed
                             GT::ate_multi_pairing(vec![
                                 (
@@ -1455,13 +1614,31 @@ impl<'a> AttributeToken<'a> {
                                     &comm.even_level_revealed_attributes[(i / 2) - 1][&j],
                                 ),
                             ])
-                        });
+                        });*/
                     }
+                    commitments_product = GT::mul(&commitments_product, &comm.comms_t[i][j].pow(&-blinding));
+                    b_vec.push(&b_vec[b_vec.len() - 1] * &b);
                 }
 
                 // For verkey
-                let com_i_vk = if i != L {
-                    GT::ate_multi_pairing(vec![
+                let blinding = &b_vec[b_vec.len() - 1];
+                if i != L {
+                    pairing_elems.push(
+                        (
+                            &(&comm.even_level_blinded_r[(i / 2) - 1] * blinding),
+                            &resp.even_level_resp_t[(i / 2) - 1][attr_count - 1],
+                        )
+                    );
+                    pairing_elems.push(
+                        (
+                            &(&resp.odd_level_resp_vk[(i / 2) - 1] * blinding),
+                            &(-&setup_params_2.y[attr_count - 1]),
+                        )
+                    );
+                    pairing_elems.push(
+                        (&(&groth2_neg_g1 * blinding), &resp.even_level_resp_vk[(i / 2) - 1])
+                    );
+                    /*GT::ate_multi_pairing(vec![
                         (
                             &comm.even_level_blinded_r[(i / 2) - 1],
                             &resp.even_level_resp_t[(i / 2) - 1][attr_count - 1],
@@ -1471,9 +1648,24 @@ impl<'a> AttributeToken<'a> {
                             &(-&setup_params_2.y[attr_count - 1]),
                         ),
                         (&groth2_neg_g1, &resp.even_level_resp_vk[(i / 2) - 1]),
-                    ])
+                    ])*/
                 } else {
-                    let e_1 = GT::ate_2_pairing(
+                    pairing_elems.push(
+                        (
+                            &(&comm.even_level_blinded_r[(i / 2) - 1] * blinding),
+                            &resp.even_level_resp_t[(i / 2) - 1][attr_count - 1],
+                        )
+                    );
+                    pairing_elems.push(
+                        (
+                            &(&resp.odd_level_resp_vk[(i / 2) - 1] * blinding),
+                            &(-&setup_params_2.y[attr_count - 1]),
+                        )
+                    );
+                    pairing_elems.push(
+                        (&(&groth2_neg_g1 * &resp.resp_csk * blinding), &setup_params_2.g2)
+                    );
+                    /*let e_1 = GT::ate_2_pairing(
                         &comm.even_level_blinded_r[(i / 2) - 1],
                         &resp.even_level_resp_t[(i / 2) - 1][attr_count - 1],
                         &resp.odd_level_resp_vk[(i / 2) - 1],
@@ -1481,10 +1673,12 @@ impl<'a> AttributeToken<'a> {
                     );
                     let e_2 = GT::ate_pairing(&groth2_neg_g1, &setup_params_2.g2);
                     let e_3 = GT::pow(&e_2, &resp.resp_csk);
-                    GT::mul(&e_1, &e_3)
-                };
-                com_t.push(com_i_vk);
-                comms_t.push(com_t);
+                    GT::mul(&e_1, &e_3)*/
+                }
+                commitments_product = GT::mul(&commitments_product, &comm.comms_t[i][attr_count - 1].pow(&-blinding));
+                b_vec.push(&b_vec[b_vec.len() - 1] * &b);
+//                com_t.push(com_i_vk);
+//                comms_t.push(com_t);
             }
         }
 
