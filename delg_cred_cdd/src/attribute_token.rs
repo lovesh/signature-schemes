@@ -2287,14 +2287,14 @@ mod tests {
             println!("Commitment takes {:?}, response takes {:?}, commitment reconstitution takes {:?}. Total time taken by commitment and response is {:?}",
                      com_duration, resp_duration, recon_duration, com_duration + resp_duration);
             println!(
-                "Commitment with precomputation on setup paprams takes {:?}",
+                "Commitment with precomputation on setup params takes {:?}",
                 com_precomp_setup_duration
             );
             println!(
-                "Commitment with precomputation on setup paprams and signature takes {:?}",
+                "Commitment with precomputation on setup params and signature takes {:?}",
                 com_precomp_duration
             );
-            println!("Commitment reconstitution with precomputation on setup paprams and root issuer key takes {:?}", recon_precomp_duration);
+            println!("Commitment reconstitution with precomputation on setup params and root issuer key takes {:?}", recon_precomp_duration);
         }
     }
 
