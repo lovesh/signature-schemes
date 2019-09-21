@@ -17,7 +17,7 @@ pub type OtherGroup = amcl_wrapper::group_elem_g1::G1;
 #[cfg(feature = "G1G2")]
 pub type OtherGroupVec = amcl_wrapper::group_elem_g1::G1Vector;
 #[cfg(feature = "G1G2")]
-pub(crate) fn ate_2_pairing(
+pub fn ate_2_pairing(
     g1: &SignatureGroup,
     g2: &OtherGroup,
     h1: &SignatureGroup,
@@ -35,7 +35,7 @@ pub type OtherGroup = amcl_wrapper::group_elem_g2::G2;
 #[cfg(feature = "G2G1")]
 pub type OtherGroupVec = amcl_wrapper::group_elem_g2::G2Vector;
 #[cfg(feature = "G2G1")]
-pub(crate) fn ate_2_pairing(
+pub fn ate_2_pairing(
     g1: &SignatureGroup,
     g2: &OtherGroup,
     h1: &SignatureGroup,

@@ -21,18 +21,7 @@ impl Signature {
     ) -> Result<Self, PSError> {
         // TODO: Take PRNG as argument. This will allow deterministic signatures as well
         Self::check_verkey_and_messages_compat(messages, verkey)?;
-        let u = FieldElement::random();
-        let sigma_1 = &verkey.g * &u;
-        let mut points = SignatureGroupVec::new(0);
-        let mut scalars = FieldElementVector::new(0);
-        points.push(sigkey.X.clone());
-        scalars.push(FieldElement::one());
-        for i in 0..messages.len() {
-            scalars.push(messages[i].clone());
-            points.push(verkey.Y[i].clone());
-        }
-        // TODO: Remove unwrap by accommodating wrapper's error in PSError
-        let sigma_2 = points.multi_scalar_mul_const_time(&scalars).unwrap() * &u;
+        let (sigma_1, sigma_2) = Self::_sign(messages, sigkey, verkey, None);
         Ok(Signature { sigma_1, sigma_2 })
     }
 
@@ -45,48 +34,36 @@ impl Signature {
         verkey: &Verkey,
     ) -> Result<Self, PSError> {
         verkey.validate()?;
-        // There should be commitment to atleast one message
+        // There should be commitment to at least one message
         if messages.len() >= verkey.Y.len() {
-            // TODO: Use a different error
             return Err(PSError::UnsupportedNoOfMessages {
                 expected: messages.len(),
                 given: verkey.Y.len(),
             });
         }
 
-        let u = FieldElement::random();
-        let sigma_1 = &verkey.g * &u;
-        let mut points = SignatureGroupVec::new(0);
-        let mut scalars = FieldElementVector::new(0);
-        points.push(sigkey.X.clone());
-        scalars.push(FieldElement::one());
-        points.push(commitment.clone());
-        scalars.push(FieldElement::one());
-        let diff = (verkey.Y.len() - messages.len());
-        for i in 0..messages.len() {
-            scalars.push(messages[i].clone());
-            points.push(verkey.Y[diff + i].clone());
-        }
-        let sigma_2 = points.multi_scalar_mul_const_time(&scalars).unwrap() * &u;
+        let (sigma_1, sigma_2) = Self::_sign(messages, sigkey, verkey, Some(commitment));
         Ok(Signature { sigma_1, sigma_2 })
     }
 
     /// Verify a signature. During proof of knowledge also, this method is used after extending the verkey
     pub fn verify(&self, messages: &[FieldElement], verkey: &Verkey) -> Result<bool, PSError> {
+        if self.sigma_1.is_identity() || self.sigma_2.is_identity() {
+            return Ok(false);
+        }
         Self::check_verkey_and_messages_compat(messages, verkey)?;
-        let mut points = OtherGroupVec::new(0);
-        let mut scalars = FieldElementVector::new(0);
-        points.push(verkey.X_tilde.clone());
-        scalars.push(FieldElement::one());
+        let mut points = OtherGroupVec::with_capacity(messages.len());
+        let mut scalars = FieldElementVector::with_capacity(messages.len());
         for i in 0..messages.len() {
             scalars.push(messages[i].clone());
             points.push(verkey.Y_tilde[i].clone());
         }
         // pr = X_tilde * Y_tilde[0]^messages[0] * Y_tilde[1]^messages[1] * .... Y_tilde[i]^messages[i]
-        let pr = points.multi_scalar_mul_var_time(&scalars).unwrap();
+        let pr = &verkey.X_tilde + &points.multi_scalar_mul_var_time(&scalars).unwrap();
         // check e(sigma_1, pr) == e(sigma_2, g_tilde) => e(sigma_1, pr) * e(sigma_2, g_tilde)^-1 == 1
-        let neg_g_tilde = verkey.g_tilde.negation();
-        let res = ate_2_pairing(&self.sigma_1, &pr, &self.sigma_2, &neg_g_tilde);
+        // e(sigma_1, pr) * e(sigma_2, g_tilde)^-1 = e(sigma_1, pr) * e(sigma_2^-1, g_tilde), if precomputation can be used, then
+        // inverse in sigma_2 can be avoided since inverse of g_tilde can be precomputed
+        let res = ate_2_pairing(&self.sigma_1, &pr, &(-&self.sigma_2), &verkey.g_tilde);
         Ok(res.is_one())
     }
 
@@ -97,6 +74,13 @@ impl Signature {
         let sigma_1_t = &sigma_1 * blinding;
         let sigma_2 = &self.sigma_2 - sigma_1_t;
         Self { sigma_1, sigma_2 }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.append(&mut self.sigma_1.to_bytes());
+        bytes.append(&mut self.sigma_2.to_bytes());
+        bytes
     }
 
     pub fn check_verkey_and_messages_compat(
@@ -111,6 +95,31 @@ impl Signature {
             });
         }
         Ok(())
+    }
+
+    pub fn _sign(
+        messages: &[FieldElement],
+        sigkey: &Sigkey,
+        verkey: &Verkey,
+        commitment: Option<&SignatureGroup>,
+    ) -> (SignatureGroup, SignatureGroup) {
+        let u = FieldElement::random();
+        // sigma_1 = g^u
+        let sigma_1 = &verkey.g * &u;
+        let mut points = SignatureGroupVec::new(0);
+        let mut scalars = FieldElementVector::new(0);
+        let offset = verkey.Y.len() - messages.len();
+        for i in 0..messages.len() {
+            scalars.push(messages[i].clone());
+            points.push(verkey.Y[offset + i].clone());
+        }
+        // sigma_2 = {X + Y_i^{m_i} + commitment}^u
+        let mut sigma_2 = &sigkey.X + &points.multi_scalar_mul_const_time(&scalars).unwrap();
+        if commitment.is_some() {
+            sigma_2 += commitment.unwrap()
+        }
+        sigma_2 = &sigma_2 * &u;
+        (sigma_1, sigma_2)
     }
 }
 
