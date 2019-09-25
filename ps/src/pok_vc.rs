@@ -75,8 +75,8 @@ macro_rules! impl_PoK_VC {
 
         #[derive(Clone, Debug, Serialize, Deserialize)]
         pub struct $Proof {
-            commitment: $group_element,
-            responses: FieldElementVector,
+            pub commitment: $group_element,
+            pub responses: FieldElementVector,
         }
 
         impl $ProverCommitting {

@@ -19,6 +19,7 @@ impl_PoK_VC!(
     SignatureGroup,
     SignatureGroupVec
 );
+
 impl_PoK_VC!(
     ProverCommittingOtherGroup,
     ProverCommittedOtherGroup,
@@ -171,6 +172,7 @@ impl PoKOfSignatureProof {
             j += b.multi_scalar_mul_var_time(&e).unwrap();
             &j
         };
+        // e(sigma_1, (J + &X_tilde)) == e(sigma_2, g_tilde) => e(sigma_1, (J + &X_tilde)) * e(-sigma_2, g_tilde) == 1
         // Slight optimization possible by precomputing inverse of g_tilde and storing to avoid inverse of sig.sigma_2
         let res = ate_2_pairing(
             &self.sig.sigma_1,
@@ -188,6 +190,14 @@ mod tests {
     // For benchmarking
     use crate::keys::keygen;
     use std::time::{Duration, Instant};
+
+    impl_PoK_VC!(
+        ProverCommittingSignatureGroup,
+        ProverCommittedSignatureGroup,
+        ProofSignatureGroup,
+        SignatureGroup,
+        SignatureGroupVec
+    );
 
     #[test]
     fn test_PoK_VC_SignatureGroup() {
