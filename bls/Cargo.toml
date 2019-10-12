@@ -11,6 +11,6 @@ lazy_static = "1.3.0"
 log = "*"
 
 [dependencies.amcl_wrapper]
-git = "https://github.com/lovesh/amcl_rust_wrapper"
-rev = "4ea40f758e9d676937ea3e609d63b37fe9e1df7f"
+version = "0.1.6"
+default-features = false
 features = ["bls381"]

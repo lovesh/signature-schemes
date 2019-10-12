@@ -6,6 +6,7 @@ use amcl_wrapper::group_elem_g2::G2;
 
 use super::common::{SigKey, VerKey};
 use super::simple::Signature;
+use common::Params;
 
 // This is an older but FASTER way of doing BLS signature aggregation but it IS VULNERABLE to rogue
 // public key attack. Use the proof of possession before trusting a new Verkey.
@@ -14,8 +15,8 @@ pub fn generate_proof_of_possession(verkey: &VerKey, sigkey: &SigKey) -> Signatu
     Signature::new(verkey.to_bytes().as_ref(), &sigkey)
 }
 
-pub fn verify_proof_of_possession(proof: &Signature, verkey: &VerKey) -> bool {
-    proof.verify(verkey.to_bytes().as_ref(), verkey)
+pub fn verify_proof_of_possession(proof: &Signature, verkey: &VerKey, params: &Params) -> bool {
+    proof.verify(verkey.to_bytes().as_ref(), verkey, params)
 }
 
 #[derive(Debug, Clone)]
@@ -27,7 +28,7 @@ impl AggregatedVerKeyFast {
     pub fn new(ver_keys: Vec<&VerKey>) -> Self {
         let mut avk: G2 = G2::identity();
         for vk in ver_keys {
-            avk += vk.point;
+            avk += &vk.point;
         }
         AggregatedVerKeyFast { point: avk }
     }
@@ -42,27 +43,27 @@ impl AggregatedVerKeyFast {
 }
 
 #[derive(Debug, Clone)]
-pub struct AggregatedSignatureFast {
+pub struct MultiSignatureFast {
     pub point: G1,
 }
 
-impl AggregatedSignatureFast {
+impl MultiSignatureFast {
     pub fn new(sigs: Vec<&Signature>) -> Self {
         let mut asig: G1 = G1::identity();
         for s in sigs {
-            asig += s.point;
+            asig += &s.point;
         }
-        AggregatedSignatureFast { point: asig }
+        MultiSignatureFast { point: asig }
     }
 
-    pub fn verify(&self, msg: &[u8], ver_keys: Vec<&VerKey>) -> bool {
+    pub fn verify(&self, msg: &[u8], ver_keys: Vec<&VerKey>, params: &Params) -> bool {
         let avk = AggregatedVerKeyFast::new(ver_keys);
-        self.verify_using_aggr_vk(msg, &avk)
+        self.verify_using_aggr_vk(msg, &avk, params)
     }
 
     // For verifying multiple aggregate signatures from the same signers,
     // an aggregated verkey should be created once and then used for each signature verification
-    pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKeyFast) -> bool {
+    pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKeyFast, params: &Params) -> bool {
         // TODO: combine verification code with the one in aggr_slow.rs
         if self.point.is_identity() {
             println!("Signature point at infinity");
@@ -77,15 +78,15 @@ impl AggregatedSignatureFast {
         // or e(msg_hash_point, avk.point) * e(self.point, -G2::generator()) == 1
         let e = GT::ate_2_pairing(
             &self.point,
-            &G2::generator().negation(),
+            &params.g.negation(),
             &msg_hash_point,
             &avk.point,
         );
         e.is_one()
     }
 
-    pub fn from_bytes(sig_bytes: &[u8]) -> Result<AggregatedSignatureFast, SerzDeserzError> {
-        G1::from_bytes(sig_bytes).map(|point| AggregatedSignatureFast { point })
+    pub fn from_bytes(sig_bytes: &[u8]) -> Result<MultiSignatureFast, SerzDeserzError> {
+        G1::from_bytes(sig_bytes).map(|point| MultiSignatureFast { point })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -102,21 +103,23 @@ mod tests {
 
     #[test]
     fn proof_of_possession() {
-        let keypair = Keypair::new(None);
+        let params = Params::new("test".as_bytes());
+        let keypair = Keypair::new(None, &params);
         let sk = keypair.sig_key;
         let vk = keypair.ver_key;
 
         let proof = generate_proof_of_possession(&vk, &sk);
-        assert!(verify_proof_of_possession(&proof, &vk));
+        assert!(verify_proof_of_possession(&proof, &vk, &params));
     }
 
     #[test]
-    fn aggr_sign_verify_old() {
-        let keypair1 = Keypair::new(None);
-        let keypair2 = Keypair::new(None);
-        let keypair3 = Keypair::new(None);
-        let keypair4 = Keypair::new(None);
-        let keypair5 = Keypair::new(None);
+    fn multi_sign_verify_fast() {
+        let params = Params::new("test".as_bytes());
+        let keypair1 = Keypair::new(None, &params);
+        let keypair2 = Keypair::new(None, &params);
+        let keypair3 = Keypair::new(None, &params);
+        let keypair4 = Keypair::new(None, &params);
+        let keypair5 = Keypair::new(None, &params);
 
         let msg = "Small msg";
         let msg1 = "121220888888822111212";
@@ -131,7 +134,7 @@ mod tests {
 
             for keypair in vec![&keypair1, &keypair2, &keypair3, &keypair4, &keypair5] {
                 let sig = Signature::new(&b, &keypair.sig_key);
-                assert!(sig.verify(&b, &keypair.ver_key));
+                assert!(sig.verify(&b, &keypair.ver_key, &params));
                 let v = keypair.ver_key.clone();
                 vks.push(v);
                 sigs.push(sig);
@@ -140,34 +143,37 @@ mod tests {
             let vks_1: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let vks_2: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let sigs: Vec<&Signature> = sigs.iter().map(|s| s).collect();
-            let asig = AggregatedSignatureFast::new(sigs);
-            assert!(asig.verify(&b, vks_1));
+            let asig = MultiSignatureFast::new(sigs);
+            assert!(asig.verify(&b, vks_1, &params));
 
             let avk = AggregatedVerKeyFast::new(vks_2);
-            assert!(asig.verify_using_aggr_vk(&b, &avk));
+            assert!(asig.verify_using_aggr_vk(&b, &avk, &params));
 
             let bs = asig.to_bytes();
-            let sig1 = AggregatedSignatureFast::from_bytes(&bs).unwrap();
-            assert!(sig1.verify_using_aggr_vk(&b, &avk));
+            let sig1 = MultiSignatureFast::from_bytes(&bs).unwrap();
+            assert!(sig1.verify_using_aggr_vk(&b, &avk, &params));
             // FIXME: Next line fails, probably something wrong with main amcl codebase.
             //assert_eq!(&asig.point.to_hex(), &sig1.point.to_hex());
 
             let bs = avk.to_bytes();
             let avk1 = AggregatedVerKeyFast::from_bytes(&bs).unwrap();
-            assert_eq!(&avk.point.to_hex(), &avk1.point.to_hex());
+            // FIXME: Next line fails, probably something wrong with main amcl codebase.
+            //assert_eq!(&avk.point.to_hex(), &avk1.point.to_hex());
+            assert_eq!(avk.point.to_bytes(), avk1.point.to_bytes());
         }
     }
 
     #[test]
-    fn aggregate_signature_at_infinity() {
-        let keypair1 = Keypair::new(None);
-        let keypair2 = Keypair::new(None);
+    fn multi_signature_at_infinity() {
+        let params = Params::new("test".as_bytes());
+        let keypair1 = Keypair::new(None, &params);
+        let keypair2 = Keypair::new(None, &params);
         let msg = "Small msg".as_bytes();
 
-        let asig = AggregatedSignatureFast {
+        let asig = MultiSignatureFast {
             point: G1::identity(),
         };
         let vks: Vec<&VerKey> = vec![&keypair1.ver_key, &keypair2.ver_key];
-        assert_eq!(asig.verify(&msg, vks), false);
+        assert_eq!(asig.verify(&msg, vks, &params), false);
     }
 }

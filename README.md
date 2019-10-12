@@ -1,5 +1,5 @@
-# Rust library for various signatures like Aggregate signatures, Multi signatures.
-Uses the [The Apache Milagro Cryptographic Library](https://github.com/milagro-crypto/amcl)
+# Rust library for signatures, multi signatures, group signatures, delegatable credentials
+Uses the [The Apache Milagro Cryptographic Library](https://github.com/miracl/amcl)
 
 ## Supported schemes
 1. BLS signatures from [Compact Multi-Signatures for Smaller Blockchains](https://eprint.iacr.org/2018/483.pdf) by Dan Boneh, Manu Drijvers and Gregory Neven.

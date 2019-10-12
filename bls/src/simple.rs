@@ -5,6 +5,7 @@ use amcl_wrapper::group_elem_g1::G1;
 use amcl_wrapper::group_elem_g2::G2;
 
 use super::common::{SigKey, VerKey};
+use common::Params;
 
 #[derive(Debug, Clone)]
 pub struct Signature {
@@ -21,14 +22,14 @@ impl Signature {
         Signature { point: sig }
     }
 
-    pub fn verify(&self, msg: &[u8], ver_key: &VerKey) -> bool {
+    pub fn verify(&self, msg: &[u8], ver_key: &VerKey, params: &Params) -> bool {
         // TODO: Check if point exists on curve, maybe use `ECP::new_big` and x cord of verkey
         if self.point.is_identity() {
             println!("Signature point at infinity");
             return false;
         }
         let msg_hash_point = G1::from_msg_hash(msg);
-        let lhs = GT::ate_pairing(&self.point, &G2::generator());
+        let lhs = GT::ate_pairing(&self.point, &params.g);
         let rhs = GT::ate_pairing(&msg_hash_point, &ver_key.point);
         lhs == rhs
     }
@@ -60,7 +61,8 @@ mod tests {
 
     #[test]
     fn sign_verify() {
-        let keypair = Keypair::new(None);
+        let params = Params::new("test".as_bytes());
+        let keypair = Keypair::new(None, &params);
         let sk = keypair.sig_key;
         let vk = keypair.ver_key;
 
@@ -71,37 +73,41 @@ mod tests {
         for m in vec![msg, msg1, msg2, msg3] {
             let b = m.as_bytes();
             let mut sig = Signature::new(&b, &sk);
-            assert!(sig.verify(&b, &vk));
+            assert!(sig.verify(&b, &vk, &params));
 
             let bs = sig.to_bytes();
             let mut sig1 = Signature::from_bytes(&bs).unwrap();
-            assert_eq!(&sig.point.to_hex(), &sig1.point.to_hex());
+            // FIXME: Next line fails
+            //assert_eq!(&sig.point.to_hex(), &sig1.point.to_hex());
+            assert_eq!(&sig.point.to_bytes(), &sig1.point.to_bytes());
         }
     }
 
     #[test]
     fn verification_failure() {
-        let keypair = Keypair::new(None);
+        let params = Params::new("test".as_bytes());
+        let keypair = Keypair::new(None, &params);
         let sk = keypair.sig_key;
         let vk = keypair.ver_key;
 
         let mut msg = "Some msg";
         let sig = Signature::new(&msg.as_bytes(), &sk);
         msg = "Other msg";
-        assert_eq!(sig.verify(&msg.as_bytes(), &vk), false);
+        assert_eq!(sig.verify(&msg.as_bytes(), &vk, &params), false);
         msg = "";
-        assert_eq!(sig.verify(&msg.as_bytes(), &vk), false);
+        assert_eq!(sig.verify(&msg.as_bytes(), &vk, &params), false);
     }
 
     #[test]
     fn signature_at_infinity() {
-        let keypair = Keypair::new(None);
+        let params = Params::new("test".as_bytes());
+        let keypair = Keypair::new(None, &params);
         let vk = keypair.ver_key;
 
         let msg = "Small msg".as_bytes();
         let sig = Signature {
             point: G1::identity(),
         };
-        assert_eq!(sig.verify(&msg, &vk), false);
+        assert_eq!(sig.verify(&msg, &vk, &params), false);
     }
 }
