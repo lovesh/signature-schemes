@@ -1,5 +1,13 @@
-# API
+# BLS signature
 
+## Overview
+The groups for verification key and message and signature are configurable by using feature flag.   
+When using feature `SignatureG1`, signature and message are in G1, verification key in G2 which makes signing cheaper but verification expensive.
+When using feature `SignatureG2`, signature and message are in G2, verification key in G1 which makes signing expensive but verification cheaper.  
+The default feature is `SignatureG2` to keep the verification fast.
+
+## API
+  
 #### Generate parameters which will be used by all signers and verifiers in the system. To simulate a random oracle, a publicly known string is hashed to a generate group element
 ```rust
 let params = Params::new("some publicly known string".as_bytes());

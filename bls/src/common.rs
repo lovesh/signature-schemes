@@ -4,20 +4,21 @@ use amcl_wrapper::errors::SerzDeserzError;
 use amcl_wrapper::field_elem::FieldElement;
 use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g2::G2;
+use VerkeyGroup;
 
 pub struct Params {
-    pub g: G2
+    pub g: VerkeyGroup
 }
 
 impl Params {
     pub fn new(label: &[u8]) -> Self {
         // NUMS
-        let g = G2::from_msg_hash(label);
+        let g = VerkeyGroup::from_msg_hash(label);
         Params { g }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SigKey {
     pub x: FieldElement,
 }
@@ -43,18 +44,9 @@ impl SigKey {
     }
 }
 
-/* TryFrom is in unstable rust, use it when it becomes stable
-impl From<Vec<u8>> for SigKey {
-    fn from(vec: Vec<u8>) -> Self {
-        SigKey {
-            x: BigNum::frombytes(&vec)
-        }
-    }
-}*/
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerKey {
-    pub point: G2,
+    pub point: VerkeyGroup,
 }
 
 impl VerKey {
@@ -65,27 +57,13 @@ impl VerKey {
     }
 
     pub fn from_bytes(vk_bytes: &[u8]) -> Result<VerKey, SerzDeserzError> {
-        G2::from_bytes(vk_bytes).map(|point| VerKey { point })
+        VerkeyGroup::from_bytes(vk_bytes).map(|point| VerKey { point })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         self.point.to_bytes()
     }
 }
-
-/*impl From<Vec<u8>> for VerKey {
-    fn from(vec: Vec<u8>) -> Self {
-        VerKey {
-            point: GroupG2::frombytes(&vec)
-        }
-    }
-}
-
-impl From<VerKey> for Vec<u8> {
-    fn from(vk: VerKey) -> Self {
-        vk.to_bytes()
-    }
-}*/
 
 pub struct Keypair {
     pub sig_key: SigKey,

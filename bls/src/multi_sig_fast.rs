@@ -7,6 +7,7 @@ use amcl_wrapper::group_elem_g2::G2;
 use super::common::{SigKey, VerKey};
 use super::simple::Signature;
 use common::Params;
+use ::{ate_2_pairing, VerkeyGroup, SignatureGroup};
 
 // This is an older but FASTER way of doing BLS signature aggregation but it IS VULNERABLE to rogue
 // public key attack. Use the proof of possession before trusting a new Verkey.
@@ -19,14 +20,14 @@ pub fn verify_proof_of_possession(proof: &Signature, verkey: &VerKey, params: &P
     proof.verify(verkey.to_bytes().as_ref(), verkey, params)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AggregatedVerKeyFast {
-    pub point: G2,
+    pub point: VerkeyGroup,
 }
 
 impl AggregatedVerKeyFast {
     pub fn new(ver_keys: Vec<&VerKey>) -> Self {
-        let mut avk: G2 = G2::identity();
+        let mut avk = VerkeyGroup::identity();
         for vk in ver_keys {
             avk += &vk.point;
         }
@@ -34,7 +35,7 @@ impl AggregatedVerKeyFast {
     }
 
     pub fn from_bytes(vk_bytes: &[u8]) -> Result<AggregatedVerKeyFast, SerzDeserzError> {
-        G2::from_bytes(vk_bytes).map(|point| AggregatedVerKeyFast { point })
+        VerkeyGroup::from_bytes(vk_bytes).map(|point| AggregatedVerKeyFast { point })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -42,14 +43,14 @@ impl AggregatedVerKeyFast {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiSignatureFast {
-    pub point: G1,
+    pub point: SignatureGroup,
 }
 
 impl MultiSignatureFast {
     pub fn new(sigs: Vec<&Signature>) -> Self {
-        let mut asig: G1 = G1::identity();
+        let mut asig = SignatureGroup::identity();
         for s in sigs {
             asig += &s.point;
         }
@@ -61,32 +62,23 @@ impl MultiSignatureFast {
         self.verify_using_aggr_vk(msg, &avk, params)
     }
 
-    // For verifying multiple aggregate signatures from the same signers,
+    // For verifying multiple multi-signatures from the same signers,
     // an aggregated verkey should be created once and then used for each signature verification
     pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKeyFast, params: &Params) -> bool {
-        // TODO: combine verification code with the one in aggr_slow.rs
+        // TODO: combine verification code with the one in multi_sig_slow
         if self.point.is_identity() {
             println!("Signature point at infinity");
             return false;
         }
-        let msg_hash_point = G1::from_msg_hash(msg);
-        /*let lhs = GT::ate_pairing(&self.point, &G2::generator());
-        let rhs = GT::ate_pairing(&msg_hash_point, &avk.point);
-        lhs == rhs*/
-        // Check that e(self.point, G2::generator()) == e(msg_hash_point, avk.point)
-        // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, G2::generator())^-1 == 1
-        // or e(msg_hash_point, avk.point) * e(self.point, -G2::generator()) == 1
-        let e = GT::ate_2_pairing(
-            &self.point,
-            &params.g.negation(),
-            &msg_hash_point,
-            &avk.point,
-        );
-        e.is_one()
+        let msg_hash_point = SignatureGroup::from_msg_hash(msg);
+        // Check that e(self.point, params.g) == e(msg_hash_point, avk.point)
+        // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, params.g)^-1 == 1
+        // or e(msg_hash_point, avk.point) * e(self.point, params.g^-1) == 1
+        ate_2_pairing(&msg_hash_point, &avk.point, &self.point, &params.g.negation()).is_one()
     }
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<MultiSignatureFast, SerzDeserzError> {
-        G1::from_bytes(sig_bytes).map(|point| MultiSignatureFast { point })
+        SignatureGroup::from_bytes(sig_bytes).map(|point| MultiSignatureFast { point })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -171,7 +163,7 @@ mod tests {
         let msg = "Small msg".as_bytes();
 
         let asig = MultiSignatureFast {
-            point: G1::identity(),
+            point: SignatureGroup::identity(),
         };
         let vks: Vec<&VerKey> = vec![&keypair1.ver_key, &keypair2.ver_key];
         assert_eq!(asig.verify(&msg, vks, &params), false);

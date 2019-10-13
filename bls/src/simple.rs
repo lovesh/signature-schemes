@@ -6,16 +6,17 @@ use amcl_wrapper::group_elem_g2::G2;
 
 use super::common::{SigKey, VerKey};
 use common::Params;
+use ::{SignatureGroup, ate_2_pairing};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signature {
-    pub point: G1,
+    pub point: SignatureGroup,
 }
 
 impl Signature {
     // Signature = H_0(msg) * sk
     pub fn new(msg: &[u8], sig_key: &SigKey) -> Self {
-        let hash_point = G1::from_msg_hash(msg);
+        let hash_point = SignatureGroup::from_msg_hash(msg);
         let sig = hash_point * &sig_key.x;
         // This is different from the paper, the other exponentiation happens in aggregation.
         // This avoids the signer to know beforehand of all other participants
@@ -28,29 +29,21 @@ impl Signature {
             println!("Signature point at infinity");
             return false;
         }
-        let msg_hash_point = G1::from_msg_hash(msg);
-        let lhs = GT::ate_pairing(&self.point, &params.g);
-        let rhs = GT::ate_pairing(&msg_hash_point, &ver_key.point);
-        lhs == rhs
+        let msg_hash_point = SignatureGroup::from_msg_hash(msg);
+        // e(self.point, params.g) == e(msg_hash_point, ver_key.point) =>
+        // e(msg_hash_point, ver_key.point) * e(self.point, params.g)^-1 == 1 =>
+        // e(msg_hash_point, ver_key.point) * e(self.point, params.g^-1) == 1
+        ate_2_pairing(&msg_hash_point, &ver_key.point, &self.point, &params.g.negation()).is_one()
     }
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<Signature, SerzDeserzError> {
-        G1::from_bytes(sig_bytes).map(|point| Signature { point })
+        SignatureGroup::from_bytes(sig_bytes).map(|point| Signature { point })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         self.point.to_bytes()
     }
 }
-
-/*impl CurvePoint for Signature {
-    fn is_valid_point(&self) -> bool {
-        if self.point.is_infinity() {
-            return false;
-        }
-        true
-    }
-}*/
 
 #[cfg(test)]
 mod tests {
@@ -106,7 +99,7 @@ mod tests {
 
         let msg = "Small msg".as_bytes();
         let sig = Signature {
-            point: G1::identity(),
+            point: SignatureGroup::identity(),
         };
         assert_eq!(sig.verify(&msg, &vk, &params), false);
     }

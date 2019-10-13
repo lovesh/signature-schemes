@@ -9,8 +9,15 @@ license = "Apache-2.0"
 rand = "0.6"
 lazy_static = "1.3.0"
 log = "*"
+serde = "1.0"
+serde_derive = "1.0"
 
 [dependencies.amcl_wrapper]
 version = "0.1.6"
 default-features = false
 features = ["bls381"]
+
+[features]
+default = ["SignatureG2"]
+SignatureG1 = []    # signature and message are in G1, verification key in G2
+SignatureG2 = []    # signature and message are in G2, verification key in G1

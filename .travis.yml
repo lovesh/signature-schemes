@@ -8,7 +8,8 @@ script:
   - cd musig
   - cargo test --release
   - cd ../bls
-  - cargo test --release
+  - cargo test --release --no-default-features --features SignatureG1
+  - cargo test --release --no-default-features --features SignatureG2
   - cd ../ps
   - cargo test --release --no-default-features --features G2G1
   - cargo test --release --no-default-features --features G1G2
