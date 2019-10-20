@@ -9,8 +9,8 @@
 // TODO: Add From and Into traits for converting from and to bytes for various structs
 // TODO: Support point compression
 
-extern crate rand;
 extern crate amcl_wrapper;
+extern crate rand;
 
 use amcl_wrapper::extension_field_gt::GT;
 
@@ -35,7 +35,6 @@ pub fn ate_2_pairing(
 ) -> GT {
     GT::ate_2_pairing(g1, g2, h1, h2)
 }
-
 
 // For feature SignatureG2, signature and message are in G2, verification key in G1
 #[cfg(feature = "SignatureG2")]
@@ -64,7 +63,10 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+extern crate secret_sharing;
+
+pub mod common;
 pub mod multi_sig_fast;
 pub mod multi_sig_slow;
-pub mod common;
 pub mod simple;
+pub mod threshold_sig;

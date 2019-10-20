@@ -4,7 +4,12 @@
 The groups for verification key and message and signature are configurable by using feature flag.   
 When using feature `SignatureG1`, signature and message are in G1, verification key in G2 which makes signing cheaper but verification expensive.
 When using feature `SignatureG2`, signature and message are in G2, verification key in G1 which makes signing expensive but verification cheaper.  
-The default feature is `SignatureG2` to keep the verification fast.
+The default feature is `SignatureG2` to keep the verification fast.  
+2 variatons of creating multi-sigs are provided, one that requires proof of possesion to avoid rogue key attack and is fast. The other does not 
+require proof of possesion but is slower. The former is present in `multi_sig_fast.rs` and latter in `multi_sig_slow.rs`. Both variations differ in 
+signature and verkey aggregation only. The signing algorithms for each signer remains same. The verification algorithm remains same as well. 
+Threshold signatures can be created but the currently implemented key generation requires a trusted third party but key generation mechanisms without 
+needing a trusted third party can be used without changing the signature aggregation or verkey aggregation mechanisms.  
 
 ## API
   
@@ -96,6 +101,30 @@ asig.verify(&b, vks, &params)
 let vks = vec![&keypair1.vk, &keypair2.vk]
 let avk = AggregatedVerKeyFast::new(vks);
 assert!(asig.verify_using_aggr_vk(&b, &avk, &params));
+```
+
+#### Threshold signature
+```rust
+// To generate keys using a trusted third party
+let threshold = 3;
+let total = 5;
+let params = Params::new("test".as_bytes());
+let (_, signers) = trusted_party_SSS_keygen(threshold, total, &params);
+
+// Once threshold no of signatures are present, use ThresholdScheme::aggregate_sigs
+let threshold_sig = ThresholdScheme::aggregate_sigs(threshold, sigs);
+
+// Once threshold no of keys are present, use ThresholdScheme::aggregate_vk
+let threshold_vk = ThresholdScheme::aggregate_vk(
+            threshold,
+            signers
+                .iter()
+                .map(|s| (s.id, &s.verkey))
+                .collect::<Vec<(usize, &VerKey)>>(),
+        );
+
+// Now the threshold sig can be verified like a regualar signature
+assert!(threshold_sig.verify(&msg, &threshold_vk, &params));
 ```
 
 #### Serialization and Deserialization

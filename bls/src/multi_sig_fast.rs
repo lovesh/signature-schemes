@@ -7,7 +7,7 @@ use amcl_wrapper::group_elem_g2::G2;
 use super::common::{SigKey, VerKey};
 use super::simple::Signature;
 use common::Params;
-use ::{ate_2_pairing, VerkeyGroup, SignatureGroup};
+use {ate_2_pairing, SignatureGroup, VerkeyGroup};
 
 // This is an older but FASTER way of doing BLS signature aggregation but it IS VULNERABLE to rogue
 // public key attack. Use the proof of possession before trusting a new Verkey.
@@ -64,7 +64,12 @@ impl MultiSignatureFast {
 
     // For verifying multiple multi-signatures from the same signers,
     // an aggregated verkey should be created once and then used for each signature verification
-    pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKeyFast, params: &Params) -> bool {
+    pub fn verify_using_aggr_vk(
+        &self,
+        msg: &[u8],
+        avk: &AggregatedVerKeyFast,
+        params: &Params,
+    ) -> bool {
         // TODO: combine verification code with the one in multi_sig_slow
         if self.point.is_identity() {
             println!("Signature point at infinity");
@@ -74,7 +79,13 @@ impl MultiSignatureFast {
         // Check that e(self.point, params.g) == e(msg_hash_point, avk.point)
         // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, params.g)^-1 == 1
         // or e(msg_hash_point, avk.point) * e(self.point, params.g^-1) == 1
-        ate_2_pairing(&msg_hash_point, &avk.point, &self.point, &params.g.negation()).is_one()
+        ate_2_pairing(
+            &msg_hash_point,
+            &avk.point,
+            &self.point,
+            &params.g.negation(),
+        )
+        .is_one()
     }
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<MultiSignatureFast, SerzDeserzError> {

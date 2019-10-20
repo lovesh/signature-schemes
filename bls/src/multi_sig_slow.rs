@@ -1,16 +1,16 @@
 use amcl_wrapper::errors::SerzDeserzError;
 use amcl_wrapper::extension_field_gt::GT;
 use amcl_wrapper::field_elem::{FieldElement, FieldElementVector};
-use amcl_wrapper::group_elem::GroupElementVector;
 use amcl_wrapper::group_elem::GroupElement;
+use amcl_wrapper::group_elem::GroupElementVector;
 use amcl_wrapper::group_elem_g1::G1;
 use amcl_wrapper::group_elem_g2::G2;
 
 use super::common::VerKey;
 use super::simple::Signature;
-use common::Params;
-use ::{VerkeyGroup, VerkeyGroupVec, SignatureGroup, SignatureGroupVec};
 use ate_2_pairing;
+use common::Params;
+use {SignatureGroup, SignatureGroupVec, VerkeyGroup, VerkeyGroupVec};
 
 // This is a newer but SLOWER way of doing BLS signature aggregation. This is NOT VULNERABLE to
 // rogue public key attack so does not need proof of possession.
@@ -108,7 +108,12 @@ impl MultiSignature {
 
     // For verifying multiple aggregate signatures from the same signers,
     // an aggregated verkey should be created once and then used for each signature verification
-    pub fn verify_using_aggr_vk(&self, msg: &[u8], avk: &AggregatedVerKey, params: &Params) -> bool {
+    pub fn verify_using_aggr_vk(
+        &self,
+        msg: &[u8],
+        avk: &AggregatedVerKey,
+        params: &Params,
+    ) -> bool {
         //        if !self.is_valid_point() {
         if self.point.is_identity() {
             println!("Signature point at infinity");
@@ -118,7 +123,13 @@ impl MultiSignature {
         // Check that e(self.point, params.g) == e(msg_hash_point, avk.point)
         // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, params.g)^-1 == 1
         // or e(msg_hash_point, avk.point) * e(self.point, params.g^-1) == 1
-        ate_2_pairing(&msg_hash_point, &avk.point, &self.point, &params.g.negation()).is_one()
+        ate_2_pairing(
+            &msg_hash_point,
+            &avk.point,
+            &self.point,
+            &params.g.negation(),
+        )
+        .is_one()
     }
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<MultiSignature, SerzDeserzError> {

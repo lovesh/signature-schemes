@@ -7,7 +7,7 @@ use amcl_wrapper::group_elem_g2::G2;
 use VerkeyGroup;
 
 pub struct Params {
-    pub g: VerkeyGroup
+    pub g: VerkeyGroup,
 }
 
 impl Params {

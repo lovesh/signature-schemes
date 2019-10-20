@@ -6,7 +6,7 @@ use amcl_wrapper::group_elem_g2::G2;
 
 use super::common::{SigKey, VerKey};
 use common::Params;
-use ::{SignatureGroup, ate_2_pairing};
+use {ate_2_pairing, SignatureGroup};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signature {
@@ -33,7 +33,13 @@ impl Signature {
         // e(self.point, params.g) == e(msg_hash_point, ver_key.point) =>
         // e(msg_hash_point, ver_key.point) * e(self.point, params.g)^-1 == 1 =>
         // e(msg_hash_point, ver_key.point) * e(self.point, params.g^-1) == 1
-        ate_2_pairing(&msg_hash_point, &ver_key.point, &self.point, &params.g.negation()).is_one()
+        ate_2_pairing(
+            &msg_hash_point,
+            &ver_key.point,
+            &self.point,
+            &params.g.negation(),
+        )
+        .is_one()
     }
 
     pub fn from_bytes(sig_bytes: &[u8]) -> Result<Signature, SerzDeserzError> {
