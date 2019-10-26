@@ -6,6 +6,9 @@ use amcl_wrapper::group_elem::GroupElement;
 use amcl_wrapper::group_elem_g2::G2;
 use VerkeyGroup;
 
+pub(crate) const MESSAGE_DOMAIN_PREFIX: [u8; 2] = [0, 0];
+pub(crate) const VERKEY_DOMAIN_PREFIX: [u8; 2] = [1, 1];
+
 pub struct Params {
     pub g: VerkeyGroup,
 }

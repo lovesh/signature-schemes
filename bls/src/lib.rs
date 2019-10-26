@@ -35,6 +35,10 @@ pub fn ate_2_pairing(
 ) -> GT {
     GT::ate_2_pairing(g1, g2, h1, h2)
 }
+#[cfg(feature = "SignatureG1")]
+pub fn ate_multi_pairing(elems: Vec<(&SignatureGroup, &VerkeyGroup)>) -> GT {
+    GT::ate_multi_pairing(elems)
+}
 
 // For feature SignatureG2, signature and message are in G2, verification key in G1
 #[cfg(feature = "SignatureG2")]
@@ -53,6 +57,15 @@ pub fn ate_2_pairing(
     h2: &VerkeyGroup,
 ) -> GT {
     GT::ate_2_pairing(g2, g1, h2, h1)
+}
+#[cfg(feature = "SignatureG2")]
+pub fn ate_multi_pairing(elems: Vec<(&SignatureGroup, &VerkeyGroup)>) -> GT {
+    GT::ate_multi_pairing(
+        elems
+            .into_iter()
+            .map(|(s, v)| (v, s))
+            .collect::<Vec<(&VerkeyGroup, &SignatureGroup)>>(),
+    )
 }
 
 #[cfg(test)]

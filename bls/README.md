@@ -58,27 +58,27 @@ let asig = MultiSignature::new(sigs_and_ver_keys);
 #### Multi-Signature Verification
 ```rust
 let vks = vec![&keypair1.vk, &keypair2.vk]
-asig.verify(&b, vks, &params)
+MultiSignature::verify(&asig, &b, vks, &params)
         OR
 let vks = vec![&keypair1.vk, &keypair2.vk]
 let avk = AggregatedVerKey::new(vks);
-assert!(asig.verify_using_aggr_vk(&b, &avk, &params));
+assert!(asig.verify(&b, &avk, &params));
 ```
 
 ### Multi-Signature and Verification (vulnerable to rogue public key attack but fast)
 #### Proof of possession of secret key (signature over verification key)
-##### Generate proof
+##### Generate proof of possession of signing key
 ```rust
 let keypair = Keypair::new(None);
 let sk = keypair.sig_key;
 let vk = keypair.ver_key;
 
-let proof = generate_proof_of_possession(&vk, &sk);
+let proof = ProofOfPossession::generate(&vk, &sk);
 ```
 
-##### Verify proof
+##### Verify proof of possession of signing key
 ```rust
-verify_proof_of_possession(&proof, &vk, &params)
+ProofOfPossession::verify(&proof, &vk, &params)
 ```
 
 #### Multi-Signature 
@@ -96,12 +96,16 @@ let asig = MultiSignatureFast::new(sigs);
 #### Multi-Signature Verification
 ```rust
 let vks = vec![&keypair1.vk, &keypair2.vk]
-asig.verify(&b, vks, &params)
+MultiSignatureFast::verify(&asig, &b, vks, &params)
         OR
 let vks = vec![&keypair1.vk, &keypair2.vk]
 let avk = AggregatedVerKeyFast::new(vks);
-assert!(asig.verify_using_aggr_vk(&b, &avk, &params));
+assert!(asig.verify(&b, &avk, &params));
 ```
+
+#### Batch Verification of signatures
+Use `Signature::batch_verify` and `Signature::batch_verify_distinct_msgs` for batch verification. The former  
+does not assume messages are distinct but the latter does. For their speed comparison, run test `batch_verify` 
 
 #### Threshold signature
 ```rust

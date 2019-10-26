@@ -9,16 +9,13 @@ use amcl_wrapper::group_elem_g2::G2;
 use super::common::VerKey;
 use super::simple::Signature;
 use ate_2_pairing;
-use common::Params;
+use common::{Params, VERKEY_DOMAIN_PREFIX};
 use {SignatureGroup, SignatureGroupVec, VerkeyGroup, VerkeyGroupVec};
 
 // This is a newer but SLOWER way of doing BLS signature aggregation. This is NOT VULNERABLE to
 // rogue public key attack so does not need proof of possession.
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AggregatedVerKey {
-    pub point: VerkeyGroup,
-}
+pub struct AggregatedVerKey {}
 
 impl AggregatedVerKey {
     // Hashes a verkey with all other verkeys using a Hash function `H:{0, 1}* -> Z_q`
@@ -36,14 +33,14 @@ impl AggregatedVerKey {
         for vk in all_ver_keys {
             res_vec.extend_from_slice(&vk.to_bytes());
         }
-        FieldElement::from_msg_hash(res_vec.as_slice())
+        Self::hash_verkeys(res_vec.as_slice())
     }
 
     // Calculates the aggregated verkey
     // For each `v_i` of the verkeys `vk_1, vk_2,...vk_n` calculate
     // `a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
     // Add all `a_i`
-    pub fn new(ver_keys: Vec<&VerKey>) -> Self {
+    pub fn new(ver_keys: Vec<&VerKey>) -> VerKey {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut vks = VerkeyGroupVec::with_capacity(ver_keys.len());
         let mut hs = FieldElementVector::with_capacity(ver_keys.len());
@@ -54,22 +51,16 @@ impl AggregatedVerKey {
             vks.push(vk.point.clone());
         }
         let avk = vks.multi_scalar_mul_var_time(&hs).unwrap();
-        AggregatedVerKey { point: avk }
+        VerKey { point: avk }
     }
 
-    pub fn from_bytes(vk_bytes: &[u8]) -> Result<AggregatedVerKey, SerzDeserzError> {
-        VerkeyGroup::from_bytes(vk_bytes).map(|point| AggregatedVerKey { point })
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.point.to_bytes()
+    /// Hash verkey bytes to field element. H_1 from the paper.
+    pub(crate) fn hash_verkeys(verkey_bytes: &[u8]) -> FieldElement {
+        FieldElement::from_msg_hash(&[&VERKEY_DOMAIN_PREFIX, verkey_bytes].concat())
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MultiSignature {
-    pub point: SignatureGroup,
-}
+pub struct MultiSignature {}
 
 impl MultiSignature {
     // The aggregator needs to know of all the signer before it can generate the aggregate signature.
@@ -82,7 +73,7 @@ impl MultiSignature {
     // the aggregator simply adds each signer's output. In that model, signer does more work but in the
     // implemented model, aggregator does more work and the same signer implementation can be used by
     // signers of "slow" and "fast" implementation.
-    pub fn new(sigs_and_ver_keys: Vec<(&Signature, &VerKey)>) -> Self {
+    pub fn new(sigs_and_ver_keys: Vec<(&Signature, &VerKey)>) -> Signature {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut sigs = SignatureGroupVec::with_capacity(sigs_and_ver_keys.len());
         let mut hs = FieldElementVector::with_capacity(sigs_and_ver_keys.len());
@@ -98,49 +89,16 @@ impl MultiSignature {
 
         let asig = sigs.multi_scalar_mul_var_time(&hs).unwrap();
 
-        MultiSignature { point: asig }
+        Signature { point: asig }
     }
 
-    pub fn verify(&self, msg: &[u8], ver_keys: Vec<&VerKey>, params: &Params) -> bool {
+    pub fn verify(sig: &Signature, msg: &[u8], ver_keys: Vec<&VerKey>, params: &Params) -> bool {
         let avk = AggregatedVerKey::new(ver_keys);
-        self.verify_using_aggr_vk(msg, &avk, params)
+        sig.verify(msg, &avk, params)
     }
 
     // For verifying multiple aggregate signatures from the same signers,
     // an aggregated verkey should be created once and then used for each signature verification
-    pub fn verify_using_aggr_vk(
-        &self,
-        msg: &[u8],
-        avk: &AggregatedVerKey,
-        params: &Params,
-    ) -> bool {
-        //        if !self.is_valid_point() {
-        if self.point.is_identity() {
-            println!("Signature point at infinity");
-            return false;
-        }
-        let msg_hash_point = SignatureGroup::from_msg_hash(msg);
-        // Check that e(self.point, params.g) == e(msg_hash_point, avk.point)
-        // This is equivalent to checking e(msg_hash_point, avk.point) * e(self.point, params.g)^-1 == 1
-        // or e(msg_hash_point, avk.point) * e(self.point, params.g^-1) == 1
-        ate_2_pairing(
-            &msg_hash_point,
-            &avk.point,
-            &self.point,
-            &params.g.negation(),
-        )
-        .is_one()
-    }
-
-    pub fn from_bytes(sig_bytes: &[u8]) -> Result<MultiSignature, SerzDeserzError> {
-        SignatureGroup::from_bytes(sig_bytes).map(|point| MultiSignature { point })
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.point.to_bytes()
-    }
-
-    // TODO: Add batch verification
 }
 
 #[cfg(test)]
@@ -184,19 +142,19 @@ mod tests {
             let sigs_and_ver_keys: Vec<(&Signature, &VerKey)> =
                 sigs_and_ver_keys.iter().map(|(s, v)| (s, v)).collect();
             let mut asig = MultiSignature::new(sigs_and_ver_keys);
-            assert!(asig.verify(&b, vks_1, &params));
+            assert!(MultiSignature::verify(&asig, &b, vks_1, &params));
 
             let mut avk = AggregatedVerKey::new(vks_2);
-            assert!(asig.verify_using_aggr_vk(&b, &avk, &params));
+            assert!(asig.verify(&b, &avk, &params));
 
             let bs = asig.to_bytes();
-            let mut sig1 = MultiSignature::from_bytes(&bs).unwrap();
-            assert!(sig1.verify_using_aggr_vk(&b, &avk, &params));
+            let mut sig1 = Signature::from_bytes(&bs).unwrap();
+            assert!(sig1.verify(&b, &avk, &params));
             // FIXME: Next line fails, probably something wrong with main amcl codebase.
             //assert_eq!(&asig.point.to_hex(), &sig1.point.to_hex());
 
             let bs = avk.to_bytes();
-            let mut avk1 = AggregatedVerKey::from_bytes(&bs).unwrap();
+            let mut avk1 = VerKey::from_bytes(&bs).unwrap();
             // FIXME: Next line fails, probably something wrong with main amcl codebase.
             //assert_eq!(&avk.point.to_hex(), &avk1.point.to_hex());
             assert_eq!(avk.point.to_bytes(), avk1.point.to_bytes());
@@ -210,11 +168,11 @@ mod tests {
         let keypair2 = Keypair::new(None, &params);
         let msg = "Small msg".as_bytes();
 
-        let asig = MultiSignature {
+        let asig = Signature {
             point: SignatureGroup::identity(),
         };
         let vks: Vec<&VerKey> = vec![&keypair1.ver_key, &keypair2.ver_key];
-        assert_eq!(asig.verify(&msg, vks, &params), false);
+        assert_eq!(MultiSignature::verify(&asig, &msg, vks, &params), false);
     }
 
     // TODO: New test that has benchmark for using AggregatedVerKey
