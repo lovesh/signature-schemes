@@ -8,6 +8,7 @@ The default feature is `SignatureG2` to keep the verification fast.
 2 variatons of creating multi-sigs are provided, one that requires proof of possesion to avoid rogue key attack and is fast. The other does not 
 require proof of possesion but is slower. The former is present in `multi_sig_fast.rs` and latter in `multi_sig_slow.rs`. Both variations differ in 
 signature and verkey aggregation only. The signing algorithms for each signer remains same. The verification algorithm remains same as well. 
+Batch verification is supported as well.
 Threshold signatures can be created but the currently implemented key generation requires a trusted third party but key generation mechanisms without 
 needing a trusted third party can be used without changing the signature aggregation or verkey aggregation mechanisms.  
 
