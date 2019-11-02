@@ -23,7 +23,7 @@ impl AggregatedVerKey {
     // `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
     pub fn hashed_verkey_for_aggregation(
         ver_key: &VerKey,
-        all_ver_keys: &Vec<&VerKey>,
+        all_ver_keys: &[VerKey],
     ) -> FieldElement {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut res_vec: Vec<u8> = Vec::new();
@@ -40,13 +40,13 @@ impl AggregatedVerKey {
     // For each `v_i` of the verkeys `vk_1, vk_2,...vk_n` calculate
     // `a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
     // Add all `a_i`
-    pub fn new(ver_keys: Vec<&VerKey>) -> VerKey {
+    pub fn new(ver_keys: &[VerKey]) -> VerKey {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut vks = VerkeyGroupVec::with_capacity(ver_keys.len());
         let mut hs = FieldElementVector::with_capacity(ver_keys.len());
 
-        for vk in &ver_keys {
-            let h = AggregatedVerKey::hashed_verkey_for_aggregation(vk, &ver_keys);
+        for vk in ver_keys {
+            let h = AggregatedVerKey::hashed_verkey_for_aggregation(vk, ver_keys);
             hs.push(h);
             vks.push(vk.point.clone());
         }
@@ -73,15 +73,15 @@ impl MultiSignature {
     // the aggregator simply adds each signer's output. In that model, signer does more work but in the
     // implemented model, aggregator does more work and the same signer implementation can be used by
     // signers of "slow" and "fast" implementation.
-    pub fn new(sigs_and_ver_keys: Vec<(&Signature, &VerKey)>) -> Signature {
+    pub fn new(sigs_and_ver_keys: &[(Signature, VerKey)]) -> Signature {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut sigs = SignatureGroupVec::with_capacity(sigs_and_ver_keys.len());
         let mut hs = FieldElementVector::with_capacity(sigs_and_ver_keys.len());
 
-        let all_ver_keys: Vec<&VerKey> =
+        let all_ver_keys: Vec<_> =
             sigs_and_ver_keys.iter().map(|(_, vk)| vk.clone()).collect();
 
-        for (sig, vk) in &sigs_and_ver_keys {
+        for (sig, vk) in sigs_and_ver_keys {
             let h = AggregatedVerKey::hashed_verkey_for_aggregation(vk, &all_ver_keys);
             hs.push(h);
             sigs.push(sig.point.clone());
@@ -92,7 +92,7 @@ impl MultiSignature {
         Signature { point: asig }
     }
 
-    pub fn verify(sig: &Signature, msg: &[u8], ver_keys: Vec<&VerKey>, params: &Params) -> bool {
+    pub fn verify(sig: &Signature, msg: &[u8], ver_keys: &[VerKey], params: &Params) -> bool {
         let avk = AggregatedVerKey::new(ver_keys);
         sig.verify(msg, &avk, params)
     }
@@ -137,14 +137,10 @@ mod tests {
                 sigs_and_ver_keys.push((sig, v));
             }
 
-            let vks_1: Vec<&VerKey> = vks.iter().map(|v| v).collect();
-            let vks_2: Vec<&VerKey> = vks.iter().map(|v| v).collect();
-            let sigs_and_ver_keys: Vec<(&Signature, &VerKey)> =
-                sigs_and_ver_keys.iter().map(|(s, v)| (s, v)).collect();
-            let mut asig = MultiSignature::new(sigs_and_ver_keys);
-            assert!(MultiSignature::verify(&asig, &b, vks_1, &params));
+            let mut asig = MultiSignature::new(&sigs_and_ver_keys);
+            assert!(MultiSignature::verify(&asig, &b, &vks, &params));
 
-            let mut avk = AggregatedVerKey::new(vks_2);
+            let mut avk = AggregatedVerKey::new(&vks);
             assert!(asig.verify(&b, &avk, &params));
 
             let bs = asig.to_bytes();
@@ -171,8 +167,8 @@ mod tests {
         let asig = Signature {
             point: SignatureGroup::identity(),
         };
-        let vks: Vec<&VerKey> = vec![&keypair1.ver_key, &keypair2.ver_key];
-        assert_eq!(MultiSignature::verify(&asig, &msg, vks, &params), false);
+        let vks = vec![keypair1.ver_key, keypair2.ver_key];
+        assert_eq!(MultiSignature::verify(&asig, &msg, &vks, &params), false);
     }
 
     // TODO: New test that has benchmark for using AggregatedVerKey
