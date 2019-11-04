@@ -21,9 +21,9 @@ impl AggregatedVerKey {
     // Hashes a verkey with all other verkeys using a Hash function `H:{0, 1}* -> Z_q`
     // Takes a verkey `vk_i` and all verkeys `vk_1, vk_2,...vk_n` (including `vk_i`) and calculates
     // `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
-    pub fn hashed_verkey_for_aggregation<'a>(
+    pub fn hashed_verkey_for_aggregation(
         ver_key: &VerKey,
-        all_ver_key_bytes: impl IntoIterator<Item = &'a Vec<u8>>,
+        all_ver_key_bytes: impl IntoIterator<Item = impl AsRef<[u8]>>,
     ) -> FieldElement {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut res_vec: Vec<u8> = Vec::new();
@@ -31,7 +31,7 @@ impl AggregatedVerKey {
         res_vec.extend_from_slice(&ver_key.to_bytes());
 
         for vk_bytes in all_ver_key_bytes.into_iter() {
-            res_vec.extend_from_slice(vk_bytes);
+            res_vec.extend_from_slice(vk_bytes.as_ref());
         }
         Self::hash_verkeys(res_vec.as_slice())
     }
