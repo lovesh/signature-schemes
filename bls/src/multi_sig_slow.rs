@@ -21,17 +21,17 @@ impl AggregatedVerKey {
     // Hashes a verkey with all other verkeys using a Hash function `H:{0, 1}* -> Z_q`
     // Takes a verkey `vk_i` and all verkeys `vk_1, vk_2,...vk_n` (including `vk_i`) and calculates
     // `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
-    pub fn hashed_verkey_for_aggregation(
+    pub fn hashed_verkey_for_aggregation<'a>(
         ver_key: &VerKey,
-        all_ver_keys: &[VerKey],
+        all_ver_key_bytes: impl IntoIterator<Item = &'a Vec<u8>>,
     ) -> FieldElement {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut res_vec: Vec<u8> = Vec::new();
 
         res_vec.extend_from_slice(&ver_key.to_bytes());
 
-        for vk in all_ver_keys {
-            res_vec.extend_from_slice(&vk.to_bytes());
+        for vk_bytes in all_ver_key_bytes.into_iter() {
+            res_vec.extend_from_slice(vk_bytes);
         }
         Self::hash_verkeys(res_vec.as_slice())
     }
@@ -40,17 +40,25 @@ impl AggregatedVerKey {
     // For each `v_i` of the verkeys `vk_1, vk_2,...vk_n` calculate
     // `a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
     // Add all `a_i`
-    pub fn new(ver_keys: &[VerKey]) -> VerKey {
+    pub fn new<'a, T>(ver_keys: T) -> VerKey
+    where
+        T: IntoIterator<Item = &'a VerKey>,
+        T::IntoIter: Clone,
+    {
+        let ver_keys = ver_keys.into_iter();
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
-        let mut vks = VerkeyGroupVec::with_capacity(ver_keys.len());
-        let mut hs = FieldElementVector::with_capacity(ver_keys.len());
+        let vk_bytes: Vec<_> = ver_keys.clone().map(|x| x.to_bytes()).collect();
 
-        for vk in ver_keys {
-            let h = AggregatedVerKey::hashed_verkey_for_aggregation(vk, ver_keys);
-            hs.push(h);
-            vks.push(vk.point.clone());
-        }
-        let avk = vks.multi_scalar_mul_var_time(&hs).unwrap();
+        let (hs, vks): (Vec<_>, Vec<_>) = ver_keys
+            .map(|vk| (
+                AggregatedVerKey::hashed_verkey_for_aggregation(vk, &vk_bytes),
+                vk.point.clone(),
+            ))
+            .unzip();
+
+        let avk = VerkeyGroupVec::from(vks)
+            .multi_scalar_mul_var_time(&hs.into())
+            .unwrap();
         VerKey { point: avk }
     }
 
@@ -73,26 +81,40 @@ impl MultiSignature {
     // the aggregator simply adds each signer's output. In that model, signer does more work but in the
     // implemented model, aggregator does more work and the same signer implementation can be used by
     // signers of "slow" and "fast" implementation.
-    pub fn new(sigs_and_ver_keys: &[(Signature, VerKey)]) -> Signature {
+    pub fn new<'a, T>(sigs_and_ver_keys: T) -> Signature
+    where
+        T: IntoIterator<Item = &'a (Signature, VerKey)>,
+        T::IntoIter: Clone,
+    {
+        let sigs_and_ver_keys = sigs_and_ver_keys.into_iter();
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
-        let mut sigs = SignatureGroupVec::with_capacity(sigs_and_ver_keys.len());
-        let mut hs = FieldElementVector::with_capacity(sigs_and_ver_keys.len());
 
-        let all_ver_keys: Vec<_> =
-            sigs_and_ver_keys.iter().map(|(_, vk)| vk.clone()).collect();
+        let all_ver_key_bytes: Vec<_> = sigs_and_ver_keys
+            .clone()
+            .map(|(_, vk)| vk.to_bytes())
+            .collect();
 
-        for (sig, vk) in sigs_and_ver_keys {
-            let h = AggregatedVerKey::hashed_verkey_for_aggregation(vk, &all_ver_keys);
-            hs.push(h);
-            sigs.push(sig.point.clone());
-        }
+        let (hs, sigs): (Vec<_>, Vec<_>) = sigs_and_ver_keys
+            .map(|(sig, vk)| {
+                (
+                    AggregatedVerKey::hashed_verkey_for_aggregation(vk, &all_ver_key_bytes),
+                    sig.point.clone(),
+                )
+            })
+            .unzip();
 
-        let asig = sigs.multi_scalar_mul_var_time(&hs).unwrap();
+        let asig = SignatureGroupVec::from(sigs)
+            .multi_scalar_mul_var_time(&hs.into())
+            .unwrap();
 
         Signature { point: asig }
     }
 
-    pub fn verify(sig: &Signature, msg: &[u8], ver_keys: &[VerKey], params: &Params) -> bool {
+    pub fn verify<'a, T>(sig: &Signature, msg: &[u8], ver_keys: T, params: &Params) -> bool
+    where
+        T: IntoIterator<Item = &'a VerKey>,
+        T::IntoIter: Clone,
+    {
         let avk = AggregatedVerKey::new(ver_keys);
         sig.verify(msg, &avk, params)
     }
