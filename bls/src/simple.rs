@@ -116,14 +116,15 @@ mod tests {
     // TODO: Add more test vectors
     use super::*;
     use crate::common::Keypair;
-    use rand;
     use rand::Rng;
+    use rand::thread_rng;
     use std::time::Instant;
 
     #[test]
     fn sign_verify() {
+        let mut rng = thread_rng();
         let params = Params::new("test".as_bytes());
-        let keypair = Keypair::new(None, &params);
+        let keypair = Keypair::new(&mut rng, &params);
         let sk = keypair.sig_key;
         let vk = keypair.ver_key;
 
@@ -146,8 +147,9 @@ mod tests {
 
     #[test]
     fn verification_failure() {
+        let mut rng = thread_rng();
         let params = Params::new("test".as_bytes());
-        let keypair = Keypair::new(None, &params);
+        let keypair = Keypair::new(&mut rng, &params);
         let sk = keypair.sig_key;
         let vk = keypair.ver_key;
 
@@ -161,8 +163,9 @@ mod tests {
 
     #[test]
     fn signature_at_infinity() {
+        let mut rng = thread_rng();
         let params = Params::new("test".as_bytes());
-        let keypair = Keypair::new(None, &params);
+        let keypair = Keypair::new(&mut rng, &params);
         let vk = keypair.ver_key;
 
         let msg = "Small msg".as_bytes();
@@ -181,7 +184,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let count = 5;
         for _ in 0..count {
-            let keypair = Keypair::new(None, &params);
+            let keypair = Keypair::new(&mut rng, &params);
             let msg = (0..10).map(|_| rng.gen_range(1, 100)).collect::<Vec<u8>>();
             let sig = Signature::new(&msg, &keypair.sig_key);
             sigs.push(sig);
