@@ -1,4 +1,4 @@
-use rand::rngs::EntropyRng;
+use rand::{CryptoRng, RngCore};
 
 use amcl_wrapper::errors::SerzDeserzError;
 use amcl_wrapper::field_elem::FieldElement;
@@ -27,14 +27,9 @@ pub struct SigKey {
 }
 
 impl SigKey {
-    pub fn new(rng: Option<EntropyRng>) -> Self {
-        match rng {
-            Some(mut r) => SigKey {
-                x: FieldElement::random_using_rng(&mut r),
-            },
-            None => SigKey {
-                x: FieldElement::random(),
-            },
+    pub fn new<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+        Self {
+            x: FieldElement::random_using_rng(rng),
         }
     }
 
@@ -74,7 +69,7 @@ pub struct Keypair {
 }
 
 impl Keypair {
-    pub fn new(rng: Option<EntropyRng>, params: &Params) -> Self {
+    pub fn new<R: RngCore + CryptoRng>(rng: &mut R, params: &Params) -> Self {
         let sk = SigKey::new(rng);
         let vk = VerKey::from_sigkey(&sk, params);
         Keypair {
@@ -87,12 +82,13 @@ impl Keypair {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::thread_rng;
 
     #[test]
     fn gen_verkey() {
-        let sk1 = SigKey::new(None);
-        let rng = EntropyRng::new();
-        let sk2 = SigKey::new(Some(rng));
+        let mut rng = thread_rng();
+        let sk1 = SigKey::new(&mut rng);
+        let sk2 = SigKey::new(&mut rng);
         let params = Params::new("test".as_bytes());
         for mut sk in vec![sk1, sk2] {
             let mut vk1 = VerKey::from_sigkey(&sk, &params);

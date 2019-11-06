@@ -8,6 +8,7 @@ The default feature is `SignatureG2` to keep the verification fast.
 2 variatons of creating multi-sigs are provided, one that requires proof of possesion to avoid rogue key attack and is fast. The other does not 
 require proof of possesion but is slower. The former is present in `multi_sig_fast.rs` and latter in `multi_sig_slow.rs`. Both variations differ in 
 signature and verkey aggregation only. The signing algorithms for each signer remains same. The verification algorithm remains same as well. 
+Batch verification is supported as well.
 Threshold signatures can be created but the currently implemented key generation requires a trusted third party but key generation mechanisms without 
 needing a trusted third party can be used without changing the signature aggregation or verkey aggregation mechanisms.  
 
@@ -20,10 +21,9 @@ let params = Params::new("some publicly known string".as_bytes());
 
 #### Generate keys
 ```rust
-let keypair = Keypair::new(None, &params);
-    OR
-let rng = EntropyRng::new();
-let keypair = Keypair::new(Some(rng), &params);
+let mut rng = thread_rng();
+let keypair = Keypair::new(&mut rng, &params);
+
 
 let sk = keypair.sig_key;
 let vk = keypair.ver_key;
@@ -52,7 +52,7 @@ let b = m.as_bytes();
 let sig1 = Signature::new(&b, &keypair1.sig_key);
 let sig2 = Signature::new(&b, &keypair2.sig_key);
 let sigs_and_ver_keys: Vec<(&Signature, &VerKey)> = vec![(&sig1, &keypair1.vk), (&sig2, &keypair2.vk)]
-let asig = MultiSignature::new(sigs_and_ver_keys);
+let asig = MultiSignature::from_sigs(sigs_and_ver_keys);
 ```
 
 #### Multi-Signature Verification
@@ -61,7 +61,7 @@ let vks = vec![&keypair1.vk, &keypair2.vk]
 MultiSignature::verify(&asig, &b, vks, &params)
         OR
 let vks = vec![&keypair1.vk, &keypair2.vk]
-let avk = AggregatedVerKey::new(vks);
+let avk = AggregatedVerKey::from_verkeys(vks);
 assert!(asig.verify(&b, &avk, &params));
 ```
 
@@ -90,7 +90,7 @@ let b = m.as_bytes();
 let sig1 = Signature::new(&b, &keypair1.sig_key);
 let sig2 = Signature::new(&b, &keypair2.sig_key);
 let sigs: Vec<&Signature> = vec![&sig1, &sig2]
-let asig = MultiSignatureFast::new(sigs);
+let asig = MultiSignatureFast::from_sigs(sigs);
 ```
 
 #### Multi-Signature Verification
@@ -99,7 +99,7 @@ let vks = vec![&keypair1.vk, &keypair2.vk]
 MultiSignatureFast::verify(&asig, &b, vks, &params)
         OR
 let vks = vec![&keypair1.vk, &keypair2.vk]
-let avk = AggregatedVerKeyFast::new(vks);
+let avk = AggregatedVerKeyFast::from_verkeys(vks);
 assert!(asig.verify(&b, &avk, &params));
 ```
 
@@ -127,7 +127,7 @@ let threshold_vk = ThresholdScheme::aggregate_vk(
                 .collect::<Vec<(usize, &VerKey)>>(),
         );
 
-// Now the threshold sig can be verified like a regualar signature
+// Now the threshold sig can be verified like a regular signature
 assert!(threshold_sig.verify(&msg, &threshold_vk, &params));
 ```
 

@@ -36,7 +36,7 @@ impl ProofOfPossession {
 pub struct AggregatedVerKeyFast {}
 
 impl AggregatedVerKeyFast {
-    pub fn new(ver_keys: Vec<&VerKey>) -> VerKey {
+    pub fn from_verkeys(ver_keys: Vec<&VerKey>) -> VerKey {
         let mut avk = VerkeyGroup::identity();
         for vk in ver_keys {
             avk += &vk.point;
@@ -48,7 +48,7 @@ impl AggregatedVerKeyFast {
 pub struct MultiSignatureFast {}
 
 impl MultiSignatureFast {
-    pub fn new(sigs: Vec<&Signature>) -> Signature {
+    pub fn from_sigs(sigs: Vec<&Signature>) -> Signature {
         let mut asig = SignatureGroup::identity();
         for s in sigs {
             asig += &s.point;
@@ -57,7 +57,7 @@ impl MultiSignatureFast {
     }
 
     pub fn verify(sig: &Signature, msg: &[u8], ver_keys: Vec<&VerKey>, params: &Params) -> bool {
-        let avk = AggregatedVerKeyFast::new(ver_keys);
+        let avk = AggregatedVerKeyFast::from_verkeys(ver_keys);
         sig.verify(msg, &avk, params)
     }
 
@@ -71,11 +71,14 @@ mod tests {
     // TODO: Add more test vectors
     use super::*;
     use crate::common::Keypair;
+    use rand::Rng;
+    use rand::thread_rng;
 
     #[test]
     fn proof_of_possession() {
+        let mut rng = thread_rng();
         let params = Params::new("test".as_bytes());
-        let keypair = Keypair::new(None, &params);
+        let keypair = Keypair::new(&mut rng, &params);
         let sk = keypair.sig_key;
         let vk = keypair.ver_key;
 
@@ -85,12 +88,13 @@ mod tests {
 
     #[test]
     fn multi_sign_verify_fast() {
+        let mut rng = thread_rng();
         let params = Params::new("test".as_bytes());
-        let keypair1 = Keypair::new(None, &params);
-        let keypair2 = Keypair::new(None, &params);
-        let keypair3 = Keypair::new(None, &params);
-        let keypair4 = Keypair::new(None, &params);
-        let keypair5 = Keypair::new(None, &params);
+        let keypair1 = Keypair::new(&mut rng, &params);
+        let keypair2 = Keypair::new(&mut rng, &params);
+        let keypair3 = Keypair::new(&mut rng, &params);
+        let keypair4 = Keypair::new(&mut rng, &params);
+        let keypair5 = Keypair::new(&mut rng, &params);
 
         let msg = "Small msg";
         let msg1 = "121220888888822111212";
@@ -114,10 +118,10 @@ mod tests {
             let vks_1: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let vks_2: Vec<&VerKey> = vks.iter().map(|v| v).collect();
             let sigs: Vec<&Signature> = sigs.iter().map(|s| s).collect();
-            let asig = MultiSignatureFast::new(sigs);
+            let asig = MultiSignatureFast::from_sigs(sigs);
             assert!(MultiSignatureFast::verify(&asig, &b, vks_1, &params));
 
-            let avk = AggregatedVerKeyFast::new(vks_2);
+            let avk = AggregatedVerKeyFast::from_verkeys(vks_2);
             assert!(asig.verify(&b, &avk, &params));
 
             let bs = asig.to_bytes();
@@ -136,9 +140,10 @@ mod tests {
 
     #[test]
     fn multi_signature_at_infinity() {
+        let mut rng = thread_rng();
         let params = Params::new("test".as_bytes());
-        let keypair1 = Keypair::new(None, &params);
-        let keypair2 = Keypair::new(None, &params);
+        let keypair1 = Keypair::new(&mut rng, &params);
+        let keypair2 = Keypair::new(&mut rng, &params);
         let msg = "Small msg".as_bytes();
 
         let asig = Signature {
