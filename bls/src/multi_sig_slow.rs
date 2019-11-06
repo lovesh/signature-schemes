@@ -83,7 +83,7 @@ impl MultiSignature {
     // signers of "slow" and "fast" implementation.
     pub fn new<'a, T>(sigs_and_ver_keys: T) -> Signature
     where
-        T: IntoIterator<Item = &'a (Signature, VerKey)>,
+        T: IntoIterator<Item = (&'a Signature, &'a VerKey)>,
         T::IntoIter: Clone,
     {
         let sigs_and_ver_keys = sigs_and_ver_keys.into_iter();
@@ -159,7 +159,8 @@ mod tests {
                 sigs_and_ver_keys.push((sig, v));
             }
 
-            let mut asig = MultiSignature::new(&sigs_and_ver_keys);
+            let sigs_and_ver_keys = sigs_and_ver_keys.iter().map(|(sig, vk)| (sig, vk));
+            let mut asig = MultiSignature::new(sigs_and_ver_keys);
             assert!(MultiSignature::verify(&asig, &b, &vks, &params));
 
             let mut avk = AggregatedVerKey::new(&vks);
