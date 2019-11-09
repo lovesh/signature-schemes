@@ -21,7 +21,7 @@ impl Params {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SigKey {
     pub x: FieldElement,
 }
@@ -42,7 +42,7 @@ impl SigKey {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VerKey {
     pub point: VerkeyGroup,
 }

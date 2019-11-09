@@ -10,7 +10,7 @@ use common::{Params, MESSAGE_DOMAIN_PREFIX};
 use {ate_2_pairing, SignatureGroup, SignatureGroupVec};
 use {ate_multi_pairing, VerkeyGroup};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Signature {
     pub point: SignatureGroup,
 }
