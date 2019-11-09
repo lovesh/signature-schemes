@@ -11,6 +11,7 @@ use super::simple::Signature;
 use ate_2_pairing;
 use common::{Params, VERKEY_DOMAIN_PREFIX};
 use {SignatureGroup, SignatureGroupVec, VerkeyGroup, VerkeyGroupVec};
+use std::borrow::Borrow;
 
 // This is a newer but SLOWER way of doing BLS signature aggregation. This is NOT VULNERABLE to
 // rogue public key attack so does not need proof of possession.
@@ -81,23 +82,27 @@ impl MultiSignature {
     // the aggregator simply adds each signer's output. In that model, signer does more work but in the
     // implemented model, aggregator does more work and the same signer implementation can be used by
     // signers of "slow" and "fast" implementation.
-    pub fn from_sigs<'a, T>(sigs_and_ver_keys: T) -> Signature
+    pub fn from_sigs<'a, T, S, V, I>(sigs_and_ver_keys: T) -> Signature
     where
-        T: IntoIterator<Item = (&'a Signature, &'a VerKey)>,
+        T: IntoIterator<Item = I>,
         T::IntoIter: Clone,
+        S: Borrow<Signature> + 'a,
+        V: Borrow<VerKey> + 'a,
+        I: Borrow<(S, V)> + 'a
+
     {
         let sigs_and_ver_keys = sigs_and_ver_keys.into_iter();
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
 
         let all_ver_key_bytes: Vec<_> = sigs_and_ver_keys
             .clone()
-            .map(|(_, vk)| vk.to_bytes())
+            .map(|x| x.borrow().1.borrow().to_bytes())
             .collect();
 
         let (hs, sigs): (Vec<_>, Vec<_>) = sigs_and_ver_keys
-            .map(|(sig, vk)| (
-                AggregatedVerKey::hashed_verkey_for_aggregation(vk, &all_ver_key_bytes),
-                sig.point.clone(),
+            .map(|x| (
+                AggregatedVerKey::hashed_verkey_for_aggregation(x.borrow().1.borrow(), &all_ver_key_bytes),
+                x.borrow().0.borrow().point.clone(),
             ))
             .unzip();
 
