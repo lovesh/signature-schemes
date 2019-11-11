@@ -19,10 +19,10 @@ use std::borrow::Borrow;
 pub struct AggregatedVerKey {}
 
 impl AggregatedVerKey {
-    // Hashes a verkey with all other verkeys using a Hash function `H:{0, 1}* -> Z_q`
-    // Takes a verkey `vk_i` and all verkeys `vk_1, vk_2,...vk_n` (including `vk_i`) and calculates
-    // `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
-    pub fn hashed_verkey_for_aggregation(
+    /// Hashes a verkey with all other verkeys using a Hash function `H:{0, 1}* -> Z_q`
+    /// Takes a verkey `vk_i` and all verkeys `vk_1, vk_2,...vk_n` (including `vk_i`) and calculates
+    /// `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
+    pub(crate) fn hashed_verkey_for_aggregation(
         ver_key: &VerKey,
         all_ver_key_bytes: impl IntoIterator<Item = impl AsRef<[u8]>>,
     ) -> FieldElement {
@@ -37,10 +37,10 @@ impl AggregatedVerKey {
         Self::hash_verkeys(res_vec.as_slice())
     }
 
-    // Calculates the aggregated verkey
-    // For each `v_i` of the verkeys `vk_1, vk_2,...vk_n` calculate
-    // `a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
-    // Add all `a_i`
+    /// Calculates the aggregated verkey
+    /// For each `v_i` of the verkeys `vk_1, vk_2,...vk_n` calculate
+    /// `a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
+    /// Add all `a_i`
     pub fn from_verkeys<'a, T>(ver_keys: T) -> VerKey
     where
         T: IntoIterator<Item = &'a VerKey>,
@@ -72,16 +72,16 @@ impl AggregatedVerKey {
 pub struct MultiSignature {}
 
 impl MultiSignature {
-    // The aggregator needs to know of all the signer before it can generate the aggregate signature.
-    // Takes individual signatures from each of the signers and their verkey and aggregates the
-    // signatures. For each signature `s_i` from signer with verkey `v_i` calculate
-    // `a_i = hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
-    // `a_si = s_i * a_i`
-    // Add all `a_si`.
-    // An alternate construction is (as described in the paper) to let signer compute `s_i * a_i` and
-    // the aggregator simply adds each signer's output. In that model, signer does more work but in the
-    // implemented model, aggregator does more work and the same signer implementation can be used by
-    // signers of "slow" and "fast" implementation.
+    /// The aggregator needs to know of all the signer before it can generate the aggregate signature.
+    /// Takes individual signatures from each of the signers and their verkey and aggregates the
+    /// signatures. For each signature `s_i` from signer with verkey `v_i` calculate
+    /// `a_i = hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
+    /// `a_si = s_i * a_i`
+    /// Add all `a_si`.
+    /// An alternate construction is (as described in the paper) to let signer compute `s_i * a_i` and
+    /// the aggregator simply adds each signer's output. In that model, signer does more work but in the
+    /// implemented model, aggregator does more work and the same signer implementation can be used by
+    /// signers of "slow" and "fast" implementation.
     pub fn from_sigs<'a, T, S, V, I>(sigs_and_ver_keys: T) -> Signature
     where
         T: IntoIterator<Item = I>,
@@ -113,6 +113,8 @@ impl MultiSignature {
         Signature { point: asig }
     }
 
+    /// An aggregate VerKey is created from `ver_keys`. When verifying signature using the same
+    /// set of keys frequently generate a verkey once and then use `Signature::verify`
     pub fn verify<'a, T>(sig: &Signature, msg: &[u8], ver_keys: T, params: &Params) -> bool
     where
         T: IntoIterator<Item = &'a VerKey>,

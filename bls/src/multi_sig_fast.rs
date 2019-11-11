@@ -56,6 +56,8 @@ impl MultiSignatureFast {
         Signature { point: asig }
     }
 
+    /// An aggregate VerKey is created from `ver_keys`. When verifying signature using the same
+    /// set of keys frequently generate a verkey once and then use `Signature::verify`
     pub fn verify(sig: &Signature, msg: &[u8], ver_keys: Vec<&VerKey>, params: &Params) -> bool {
         let avk = AggregatedVerKeyFast::from_verkeys(ver_keys);
         sig.verify(msg, &avk, params)
