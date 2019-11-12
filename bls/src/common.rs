@@ -47,6 +47,10 @@ pub struct VerKey {
     pub point: VerkeyGroup,
 }
 
+impl AsRef<VerKey> for VerKey {
+    fn as_ref(&self) -> &VerKey { &self }
+}
+
 impl VerKey {
     pub fn from_sigkey(sk: &SigKey, params: &Params) -> Self {
         VerKey {
@@ -77,6 +81,10 @@ impl Keypair {
             ver_key: vk,
         }
     }
+}
+
+impl AsRef<VerKey> for Keypair {
+    fn as_ref(&self) -> &VerKey { &self.ver_key }
 }
 
 #[cfg(test)]

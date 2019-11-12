@@ -22,9 +22,9 @@ impl AggregatedVerKey {
     /// Hashes a verkey with all other verkeys using a Hash function `H:{0, 1}* -> Z_q`
     /// Takes a verkey `vk_i` and all verkeys `vk_1, vk_2,...vk_n` (including `vk_i`) and calculates
     /// `H(vk_i||vk_1||vk_2...||vk_i||...vk_n)`
-    pub(crate) fn hashed_verkey_for_aggregation(
+    pub(crate) fn hashed_verkey_for_aggregation<'a>(
         ver_key: &VerKey,
-        all_ver_key_bytes: impl IntoIterator<Item = impl AsRef<[u8]>>,
+        all_ver_key_bytes: impl IntoIterator<Item = &'a (impl AsRef<[u8]> + 'a)>,
     ) -> FieldElement {
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
         let mut res_vec: Vec<u8> = Vec::new();
@@ -41,19 +41,20 @@ impl AggregatedVerKey {
     /// For each `v_i` of the verkeys `vk_1, vk_2,...vk_n` calculate
     /// `a_i = vk_i * hashed_verkey_for_aggregation(vk_i, [vk_1, vk_2,...vk_n])`
     /// Add all `a_i`
-    pub fn from_verkeys<'a, T>(ver_keys: T) -> VerKey
+    pub fn from_verkeys<'a, T, V>(ver_keys: T) -> VerKey
     where
-        T: IntoIterator<Item = &'a VerKey>,
+        T: IntoIterator<Item = &'a V>,
         T::IntoIter: Clone,
+        V: AsRef<VerKey> + 'a
     {
         let ver_keys = ver_keys.into_iter();
         // TODO: Sort the verkeys in some order to avoid accidentally passing wrong order of keys
-        let vk_bytes: Vec<_> = ver_keys.clone().map(|x| x.to_bytes()).collect();
+        let vk_bytes: Vec<_> = ver_keys.clone().map(|x| x.as_ref().to_bytes()).collect();
 
         let (hs, vks): (Vec<_>, Vec<_>) = ver_keys
             .map(|vk| (
-                AggregatedVerKey::hashed_verkey_for_aggregation(vk, &vk_bytes),
-                vk.point.clone(),
+                AggregatedVerKey::hashed_verkey_for_aggregation(vk.as_ref(), &vk_bytes),
+                vk.as_ref().point.clone(),
             ))
             .unzip();
 
@@ -82,13 +83,11 @@ impl MultiSignature {
     /// the aggregator simply adds each signer's output. In that model, signer does more work but in the
     /// implemented model, aggregator does more work and the same signer implementation can be used by
     /// signers of "slow" and "fast" implementation.
-    pub fn from_sigs<'a, T, S, V, I>(sigs_and_ver_keys: T) -> Signature
+    pub fn from_sigs<'a, T, I>(sigs_and_ver_keys: T) -> Signature
     where
-        T: IntoIterator<Item = I>,
+        T: IntoIterator<Item = &'a I>,
         T::IntoIter: Clone,
-        S: Borrow<Signature> + 'a,
-        V: Borrow<VerKey> + 'a,
-        I: Borrow<(S, V)> + 'a
+        I: AsRef<VerKey> + AsRef<Signature> + 'a
 
     {
         let sigs_and_ver_keys = sigs_and_ver_keys.into_iter();
@@ -96,13 +95,13 @@ impl MultiSignature {
 
         let all_ver_key_bytes: Vec<_> = sigs_and_ver_keys
             .clone()
-            .map(|x| x.borrow().1.borrow().to_bytes())
+            .map(|x| AsRef::<VerKey>::as_ref(x).to_bytes())
             .collect();
 
         let (hs, sigs): (Vec<_>, Vec<_>) = sigs_and_ver_keys
             .map(|x| (
-                AggregatedVerKey::hashed_verkey_for_aggregation(x.borrow().1.borrow(), &all_ver_key_bytes),
-                x.borrow().0.borrow().point.clone(),
+                AggregatedVerKey::hashed_verkey_for_aggregation(x.as_ref(), &all_ver_key_bytes),
+                AsRef::<Signature>::as_ref(x).point.clone(),
             ))
             .unzip();
 
@@ -115,10 +114,11 @@ impl MultiSignature {
 
     /// An aggregate VerKey is created from `ver_keys`. When verifying signature using the same
     /// set of keys frequently generate a verkey once and then use `Signature::verify`
-    pub fn verify<'a, T>(sig: &Signature, msg: &[u8], ver_keys: T, params: &Params) -> bool
+    pub fn verify<'a, T, K>(sig: &Signature, msg: &[u8], ver_keys: T, params: &Params) -> bool
     where
-        T: IntoIterator<Item = &'a VerKey>,
+        T: IntoIterator<Item = &'a K>,
         T::IntoIter: Clone,
+        K: AsRef<VerKey> + 'a
     {
         let avk = AggregatedVerKey::from_verkeys(ver_keys);
         sig.verify(msg, &avk, params)
@@ -167,14 +167,10 @@ mod tests {
                 sigs_and_ver_keys.push((sig, v));
             }
 
-            let vks_1: Vec<&VerKey> = vks.iter().map(|v| v).collect();
-            let vks_2: Vec<&VerKey> = vks.iter().map(|v| v).collect();
-            let sigs_and_ver_keys: Vec<(&Signature, &VerKey)> =
-                sigs_and_ver_keys.iter().map(|(s, v)| (s, v)).collect();
-            let mut asig = MultiSignature::from_sigs(sigs_and_ver_keys);
-            assert!(MultiSignature::verify(&asig, &b, vks_1, &params));
+            let mut asig = MultiSignature::from_sigs(&sigs_and_ver_keys);
+            assert!(MultiSignature::verify(&asig, &b, &sigs_and_ver_keys, &params));
 
-            let mut avk = AggregatedVerKey::from_verkeys(vks_2);
+            let mut avk = AggregatedVerKey::from_verkeys(&sigs_and_ver_keys);
             assert!(asig.verify(&b, &avk, &params));
 
             let bs = asig.to_bytes();
