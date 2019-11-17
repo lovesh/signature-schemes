@@ -133,7 +133,7 @@ assert!(threshold_sig.verify(&msg, &threshold_vk, &params));
 
 #### Serialization and Deserialization
 ```rust
-let bs: Vec<u8> = vec![1, 5, 190, 200, ......]
+let bs: Vec<u8> = vec![1, 5, 190, 200, ......];
 
 let sk = SigKey::from_bytes(&bs);
 let sk_bytes = sk.tobytes();

@@ -1,4 +1,4 @@
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, Rng};
 
 use amcl_wrapper::errors::SerzDeserzError;
 use amcl_wrapper::field_elem::FieldElement;
@@ -27,7 +27,7 @@ pub struct SigKey {
 }
 
 impl SigKey {
-    pub fn new<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+    pub fn new<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         Self {
             x: FieldElement::random_using_rng(rng),
         }
@@ -69,7 +69,7 @@ pub struct Keypair {
 }
 
 impl Keypair {
-    pub fn new<R: RngCore + CryptoRng>(rng: &mut R, params: &Params) -> Self {
+    pub fn new<R: Rng + CryptoRng>(rng: &mut R, params: &Params) -> Self {
         let sk = SigKey::new(rng);
         let vk = VerKey::from_sigkey(&sk, params);
         Keypair {
