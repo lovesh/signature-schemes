@@ -21,7 +21,7 @@ impl Params {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SigKey {
     pub x: FieldElement,
 }
@@ -42,9 +42,13 @@ impl SigKey {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VerKey {
     pub point: VerkeyGroup,
+}
+
+impl AsRef<VerKey> for VerKey {
+    fn as_ref(&self) -> &VerKey { &self }
 }
 
 impl VerKey {
@@ -77,6 +81,10 @@ impl Keypair {
             ver_key: vk,
         }
     }
+}
+
+impl AsRef<VerKey> for Keypair {
+    fn as_ref(&self) -> &VerKey { &self.ver_key }
 }
 
 #[cfg(test)]
