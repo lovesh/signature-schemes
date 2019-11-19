@@ -10,7 +10,7 @@ use common::{Params, MESSAGE_DOMAIN_PREFIX};
 use {ate_2_pairing, SignatureGroup, SignatureGroupVec};
 use {ate_multi_pairing, VerkeyGroup};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Signature {
     pub point: SignatureGroup,
 }
@@ -108,6 +108,26 @@ impl Signature {
     pub(crate) fn hash_message(msg: &[u8]) -> SignatureGroup {
         SignatureGroup::from_msg_hash(&[&MESSAGE_DOMAIN_PREFIX, msg].concat())
     }
+}
+
+impl AsRef<Signature> for Signature {
+    fn as_ref(&self) -> &Signature { &self }
+}
+
+impl AsRef<Signature> for (Signature, VerKey) {
+    fn as_ref(&self) -> &Signature { &self.0 }
+}
+
+impl AsRef<Signature> for (VerKey, Signature) {
+    fn as_ref(&self) -> &Signature { &self.1 }
+}
+
+impl AsRef<VerKey> for (Signature, VerKey) {
+    fn as_ref(&self) -> &VerKey { &self.1 }
+}
+
+impl AsRef<VerKey> for (VerKey, Signature) {
+    fn as_ref(&self) -> &VerKey { &self.0 }
 }
 
 #[cfg(test)]
