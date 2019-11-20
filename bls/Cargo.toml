@@ -1,6 +1,6 @@
 [package]
 name = "bls_amcl"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Lovesh Harchandani <lovesh.bond@gmail.com>"]
 description = "BLS signatures. 2 variations. Multi-signature, Threshold signature, batch verification support"
 repository = "https://github.com/lovesh/signature-schemes/tree/master/bls"
