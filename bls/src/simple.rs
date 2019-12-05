@@ -45,21 +45,23 @@ impl Signature {
     }
 
     /// Batch verification of signatures. Takes a vector of 3-tuple where each tuple has a message,
-    /// signature and public key. Messages can be same or different
-    pub fn batch_verify(msgs_sigs: Vec<(&[u8], &Signature, &VerKey)>, params: &Params) -> bool {
+    /// signature and public key. Messages can be the same or different.
+    pub fn batch_verify<'a, T, K>(msgs_sigs: T, params: &Params) -> bool
+        where T: IntoIterator<Item = &'a K> + ExactSizeIterator,
+              K: AsRef<[u8]> + AsRef<Signature> + AsRef<VerKey> + 'a {
         let r = FieldElement::random();
         let r_vec = FieldElementVector::new_vandermonde_vector(&r, msgs_sigs.len());
         let mut sigs = SignatureGroupVec::with_capacity(msgs_sigs.len());
-        let mut hs = vec![];
+        let mut hs: Vec<SignatureGroup> = vec![];
         let mut vs = vec![];
-        for (i, (msg, sig, vk)) in msgs_sigs.iter().enumerate() {
-            sigs.push(sig.point.clone());
-            hs.push(Signature::hash_message(msg));
+        for (i, x) in msgs_sigs.into_iter().enumerate() {
+            sigs.push(AsRef::<Signature>::as_ref(x).point.clone());
+            hs.push(Signature::hash_message(x.as_ref()));
             // The multiplication with &r_vec[i] can be moved to message instead of verkey but
             // since verkey is in group G1 by default and operations in G1 are cheaper.
             // A better way would be to have code conditional on features such that
             // multiplication is moved to message when messages are in G1 and verkey in G2.
-            vs.push(&vk.point * &r_vec[i]);
+            vs.push(&AsRef::<VerKey>::as_ref(x).point * &r_vec[i]);
         }
         let aggr_sig = sigs.multi_scalar_mul_var_time(&r_vec).unwrap();
         let mut pairings = hs
@@ -74,17 +76,19 @@ impl Signature {
 
     /// Batch verification of signatures. Takes a vector of 3-tuple where each tuple has a message,
     /// signature and public key. Assumes all messages to be distinct
-    pub fn batch_verify_distinct_msgs(
-        msgs_sigs: Vec<(&[u8], &Signature, &VerKey)>,
+    pub fn batch_verify_distinct_msgs<'a, T, K>(
+        msgs_sigs: T,
         params: &Params,
-    ) -> bool {
+    ) -> bool
+        where T: IntoIterator<Item = &'a K>,
+              K: AsRef<[u8]> + AsRef<Signature> + AsRef<VerKey> + 'a {
         let mut aggr_sig = SignatureGroup::new();
-        let mut hs = vec![];
-        let mut vs = vec![];
-        for (msg, sig, vk) in msgs_sigs {
-            aggr_sig += &sig.point;
-            hs.push(Signature::hash_message(msg));
-            vs.push(vk);
+        let mut hs: Vec<SignatureGroup> = Vec::new();
+        let mut vs: Vec<&VerKey> = Vec::new();
+        for msgs_sig in msgs_sigs {
+            aggr_sig += &AsRef::<Signature>::as_ref(&msgs_sig).point;
+            hs.push(Signature::hash_message(msgs_sig.as_ref()));
+            vs.push(msgs_sig.as_ref());
         }
         let mut pairings = hs
             .iter()
@@ -129,6 +133,32 @@ impl AsRef<VerKey> for (Signature, VerKey) {
 impl AsRef<VerKey> for (VerKey, Signature) {
     fn as_ref(&self) -> &VerKey { &self.0 }
 }
+
+/// Contains a message of bytes, a Signature, and a VerKey
+pub struct MessageSigAndVerKey {
+    pub message: Vec<u8>,
+    pub signature: Signature,
+    pub ver_key: VerKey
+}
+
+impl MessageSigAndVerKey {
+    pub fn new(message: Vec<u8>, signature: Signature, ver_key: VerKey) -> Self {
+        Self { message, signature, ver_key }
+    }
+}
+
+impl AsRef<[u8]> for MessageSigAndVerKey {
+    fn as_ref(&self) -> &[u8] { &self.message }
+}
+
+impl AsRef<VerKey> for MessageSigAndVerKey {
+    fn as_ref(&self) -> &VerKey { &self.ver_key }
+}
+
+impl AsRef<Signature> for MessageSigAndVerKey {
+    fn as_ref(&self) -> &Signature { &self.signature }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -198,23 +228,20 @@ mod tests {
     #[test]
     fn batch_verify() {
         let params = Params::new("test".as_bytes());
-        let mut keypairs = vec![];
-        let mut msgs = vec![];
-        let mut sigs = vec![];
+        let mut items: Vec<MessageSigAndVerKey> = Vec::new();
         let mut rng = rand::thread_rng();
         let count = 5;
         for _ in 0..count {
             let keypair = Keypair::new(&mut rng, &params);
             let msg = (0..10).map(|_| rng.gen_range(1, 100)).collect::<Vec<u8>>();
             let sig = Signature::new(&msg, &keypair.sig_key);
-            sigs.push(sig);
-            msgs.push(msg);
-            keypairs.push(keypair);
+            items.push(MessageSigAndVerKey::new(msg, sig, keypair.ver_key));
         }
 
         let start = Instant::now();
         for i in 0..count {
-            assert!(sigs[i].verify(&msgs[i], &keypairs[i].ver_key, &params));
+            let item = &items[i];
+            assert!(item.signature.verify(&item.message, &item.ver_key, &params));
         }
         println!(
             "Naive verify for {} sigs takes {:?}",
@@ -223,10 +250,7 @@ mod tests {
         );
 
         let start = Instant::now();
-        let msgs_sigs = (0..count)
-            .map(|i| (msgs[i].as_slice(), &sigs[i], &keypairs[i].ver_key))
-            .collect::<Vec<_>>();
-        assert!(Signature::batch_verify(msgs_sigs, &params));
+        assert!(Signature::batch_verify(items.iter(), &params));
         println!(
             "Batch verify for {} sigs takes {:?}",
             count,
@@ -234,10 +258,7 @@ mod tests {
         );
 
         let start = Instant::now();
-        let msgs_sigs = (0..count)
-            .map(|i| (msgs[i].as_slice(), &sigs[i], &keypairs[i].ver_key))
-            .collect::<Vec<_>>();
-        assert!(Signature::batch_verify_distinct_msgs(msgs_sigs, &params));
+        assert!(Signature::batch_verify_distinct_msgs(&items, &params));
         println!(
             "Batch verify assuming distinct messages for {} sigs takes {:?}",
             count,
